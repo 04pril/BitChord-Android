@@ -141,6 +141,9 @@ private val ART_CORNER = 8.dp
 /** Distance that makes a horizontal drag an intentional track change. */
 private val TRACK_SWIPE_THRESHOLD = 72.dp
 
+/** Downward distance required to stop playback and dismiss the mini-player. */
+private val STOP_SWIPE_THRESHOLD = 72.dp
+
 /**
  * How much further a drag may go sideways than up and still be a pull. A
  * thumb swiping up from the bottom of the screen travels on an arc, and judged
@@ -213,6 +216,7 @@ internal fun Modifier.miniPlayerGestures(
     pull: MiniPlayerPull?,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    onStopAndDismiss: () -> Unit,
     /** Listening in a party whose host holds the controls. Swipes say so instead of skipping. */
     locked: Boolean = false,
     onBlocked: () -> Unit = {},
@@ -223,6 +227,7 @@ internal fun Modifier.miniPlayerGestures(
     val currentPull by rememberUpdatedState(pull)
     val currentOnNext by rememberUpdatedState(onNext)
     val currentOnPrevious by rememberUpdatedState(onPrevious)
+    val currentOnStopAndDismiss by rememberUpdatedState(onStopAndDismiss)
     val currentLocked by rememberUpdatedState(locked)
     val currentOnBlocked by rememberUpdatedState(onBlocked)
     val scope = rememberCoroutineScope()
@@ -232,6 +237,7 @@ internal fun Modifier.miniPlayerGestures(
     val settle = remember { arrayOfNulls<Job>(1) }
     return pointerInput(Unit) {
         val trackThreshold = TRACK_SWIPE_THRESHOLD.toPx()
+        val stopThreshold = STOP_SWIPE_THRESHOLD.toPx()
         val liftEase = PULL_LIFT_EASE.toPx()
         val maxVelocity = viewConfiguration.maximumFlingVelocity
         awaitEachGesture {
@@ -239,7 +245,8 @@ internal fun Modifier.miniPlayerGestures(
             val pointer = down.id
             // Up to the slop: which way this is heading, or nothing at all.
             var start: PointerInputChange? = null
-            var vertical = false
+            var verticalUp = false
+            var verticalDown = false
             while (start == null) {
                 val change = awaitPointerEvent().changes.firstOrNull { it.id == pointer }
                     ?: return@awaitEachGesture
@@ -247,18 +254,31 @@ internal fun Modifier.miniPlayerGestures(
                 if (!change.pressed || change.isConsumed) return@awaitEachGesture
                 val moved = change.position - down.position
                 if (moved.getDistance() < viewConfiguration.touchSlop) continue
-                vertical = moved.y < 0f && abs(moved.x) < -moved.y * PULL_BIAS
-                // Downwards has nothing to do on the bar, and nor has a pull
-                // with no player to pull: left as they always were, a drag that
-                // ends inside the bar still counts as its tap.
-                if (!vertical && abs(moved.x) < abs(moved.y)) return@awaitEachGesture
-                if (vertical && currentPull == null) return@awaitEachGesture
+                verticalUp = moved.y < 0f && abs(moved.x) < -moved.y * PULL_BIAS
+                verticalDown = moved.y > 0f && abs(moved.x) < moved.y * PULL_BIAS
+                // Ambiguous diagonal gestures belong to the page behind.
+                // A down-swipe stops playback even when Reduced motion disables
+                // the sheet's up-drag animation.
+                if (!verticalUp && !verticalDown && abs(moved.x) < abs(moved.y)) return@awaitEachGesture
+                if (verticalUp && currentPull == null) return@awaitEachGesture
                 change.consume()
                 start = change
             }
             val slopped = start ?: return@awaitEachGesture
 
-            if (!vertical) {
+            if (verticalDown) {
+                var dragged = slopped.position.y - down.position.y
+                val finished = drag(pointer) { change ->
+                    dragged += change.positionChange().y
+                    change.consume()
+                }
+                if (finished && dragged >= stopThreshold) {
+                    if (currentLocked) currentOnBlocked() else currentOnStopAndDismiss()
+                }
+                return@awaitEachGesture
+            }
+
+            if (!verticalUp) {
                 var dragged = slopped.position.x - down.position.x
                 // Read before consuming: a consumed change reports no movement.
                 val finished = drag(pointer) { change ->
@@ -357,6 +377,8 @@ fun MiniPlayer(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onExpand: () -> Unit,
+    /** Downward swipe stops playback and clears the queue, not merely the view. */
+    onStopAndDismiss: () -> Unit,
     /** @see com.music.bitchord.data.listentogether.ListenTogether.State.controlsLocked */
     controlsLocked: Boolean = false,
     onBlockedControl: () -> Unit = {},
@@ -387,6 +409,7 @@ fun MiniPlayer(
                     haptics.play(Haptic.SkipPrevious)
                     onPrevious()
                 },
+                onStopAndDismiss = onStopAndDismiss,
                 locked = controlsLocked,
                 onBlocked = onBlockedControl,
             )

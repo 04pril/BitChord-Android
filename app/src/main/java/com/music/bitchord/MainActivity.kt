@@ -601,6 +601,7 @@ private fun BitChordApp(
     // takes part in the docking asks for [activeDock] / this, never for the
     // dock or the motion directly.
     val reducePlayerMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val openFullPlayerOnSongTap by AppSettings.openFullPlayerOnSongTap.collectAsStateWithLifecycle()
     val activeDock = playerDock.takeIf { !reducePlayerMotion }
     playerSheetMotion.flingVelocity = with(LocalDensity.current) { PLAYER_PULL_FLING_VELOCITY.toPx() }
     // How the app takes the player down, whatever for: a back press, or a page
@@ -1585,7 +1586,10 @@ private fun BitChordApp(
                     c.playSongs(result.timeline, result.startIndex)
                 }
             }
-            // Start playback in the mini-player; the user opens the full view by tapping it.
+            if (openFullPlayerOnSongTap) {
+                if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
+            }
+            // Off preserves the original mini-player-first behavior.
         }
     }
     // Kept for entry points whose rows already carry their origin (notably a
@@ -1644,7 +1648,10 @@ private fun BitChordApp(
                 source = source,
             )
             c.playSongs(oneOffQueue, 0)
-            // Start radio in the mini-player; the user opens the full view by tapping it.
+            if (openFullPlayerOnSongTap) {
+                if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
+            }
+            // Off preserves the original mini-player-first behavior.
         }
     }
 
@@ -4163,6 +4170,18 @@ private fun BitChordApp(
                     }
                 }
 
+                // The mini-player's downward gesture must stop *audio* and
+                // clear the queue; pause alone would leave the bar and
+                // notification ready to resume.
+                val stopAndDismissMiniPlayer: () -> Unit = {
+                    controller?.let { c ->
+                        c.pause()
+                        c.stop()
+                        c.clearMediaItems()
+                    }
+                    dismissPlayer()
+                }
+
                 if (glassActive) Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -4195,6 +4214,7 @@ private fun BitChordApp(
                         },
                         controlsLocked = controlsLocked,
                         onBlockedControl = showHostOnlyNotice,
+                        onStopAndDismiss = stopAndDismissMiniPlayer,
                         dock = activeDock,
                         pull = playerSheetMotion.takeIf { !reducePlayerMotion },
                         modifier = Modifier.fillMaxWidth(),
@@ -4232,6 +4252,7 @@ private fun BitChordApp(
                             },
                             controlsLocked = controlsLocked,
                             onBlockedControl = showHostOnlyNotice,
+                            onStopAndDismiss = stopAndDismissMiniPlayer,
                             dock = activeDock,
                             pull = playerSheetMotion.takeIf { !reducePlayerMotion },
                             modifier = Modifier.fillMaxWidth(),
@@ -4428,11 +4449,26 @@ private fun BitChordApp(
             // rating it comes back with is more authoritative than anything
             // the library feed knew — so the menu asks as it opens.
             LaunchedEffect(song.videoId) { viewModel.loadSongMenu(song.videoId) }
-            // "Remove from this playlist" is only a sentence on a playlist
-            // page the account can actually edit, and only for a row that
-            // carries the per-entry id a removal is expressed in.
-            val editable = viewModel.editablePlaylist(detail?.browseId)
-                ?.takeIf { !fromPlayer && song.setVideoId != null }
+            // In Now Playing, derive the target from the *playing queue's*
+            // originating playlist, not the page visible underneath. Require
+            // this occurrence's setVideoId to avoid deleting duplicates.
+            val playbackPlaylistId = song.playbackSourceId?.takeIf {
+                fromPlayer && song.playbackSourceType == PlaybackSourceType.BROWSE &&
+                    it.startsWith("VL") && song.setVideoId != null
+            }
+            val playlistOwnership by viewModel.playlistOwned.collectAsStateWithLifecycle()
+            LaunchedEffect(playbackPlaylistId, playlists) {
+                if (playbackPlaylistId != null) {
+                    viewModel.loadPlaylists()
+                    if (playlists.any { it.browseId == playbackPlaylistId }) {
+                        viewModel.resolvePlaylistOwnership(playbackPlaylistId)
+                    }
+                }
+            }
+            val editable = (if (fromPlayer) playbackPlaylistId else detail?.browseId)
+                ?.takeIf { song.setVideoId != null }
+                ?.let(viewModel::editablePlaylist)
+                ?.takeIf { !fromPlayer || playlistOwnership[it.browseId] == true }
             // Asked of the cache's index off the main thread as the menu opens,
             // so "Remove from cache" is only offered for a track it holds.
             // Re-asked when the cache changes, which is what drops the row

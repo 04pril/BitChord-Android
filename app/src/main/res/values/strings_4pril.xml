@@ -1,0 +1,4 @@
+<resources>
+    <string name="fourpril_open_full_player_on_tap">Open full player when tapping a song</string>
+    <string name="fourpril_open_full_player_on_tap_subtitle">Off: start in mini-player. On: open Now Playing immediately.</string>
+</resources>

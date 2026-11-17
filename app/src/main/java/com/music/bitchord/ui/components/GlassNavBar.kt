@@ -101,6 +101,7 @@ fun GlassNavBar(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onExpand: () -> Unit,
+    onStopAndDismiss: () -> Unit,
     /** @see com.music.bitchord.data.listentogether.ListenTogether.State.controlsLocked */
     controlsLocked: Boolean = false,
     onBlockedControl: () -> Unit = {},
@@ -157,6 +158,7 @@ fun GlassNavBar(
                     onNext = onNext,
                     onPrevious = onPrevious,
                     onExpand = onExpand,
+                    onStopAndDismiss = onStopAndDismiss,
                     controlsLocked = controlsLocked,
                     onBlockedControl = onBlockedControl,
                     dock = dock,
@@ -177,6 +179,7 @@ fun GlassNavBar(
                     onNext = onNext,
                     onPrevious = onPrevious,
                     onExpand = onExpand,
+                    onStopAndDismiss = onStopAndDismiss,
                     controlsLocked = controlsLocked,
                     onBlockedControl = onBlockedControl,
                     dock = dock,
@@ -303,6 +306,7 @@ private fun GlassNowPlaying(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onExpand: () -> Unit,
+    onStopAndDismiss: () -> Unit,
     controlsLocked: Boolean,
     onBlockedControl: () -> Unit,
     dock: PlayerDock?,
@@ -355,6 +359,7 @@ private fun GlassNowPlaying(
                     haptics.play(Haptic.SkipPrevious)
                     onPrevious()
                 },
+                onStopAndDismiss = onStopAndDismiss,
                 locked = controlsLocked,
                 onBlocked = onBlockedControl,
             )

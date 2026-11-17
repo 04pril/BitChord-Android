@@ -9,6 +9,14 @@ Status: experimental / build and real-device validation pending. The project is 
 - An invalid stored proxy selection is mapped to an inaccessible localhost port. Changes to a proxy require restarting the process.
 - The application does not use VpnService.
 
+### 4pril UI additions
+- Original BitChord streaming engines, source policy, audio cache, quality upgrades and crossfade remain unchanged.
+- Settings > Miscellaneous: "Open full player on song tap". Default OFF preserves the upstream mini-player-first behavior; enabled opens Now Playing for album/playlist/search song selections.
+- Mini-player swipes: UP opens Now Playing, LEFT/RIGHT changes tracks, DOWN at least 72dp calls Media3 pause + stop + clearMediaItems so playback ends and the mini-player disappears. Works on both standard and Liquid Glass mini-player.
+- Playing song's overflow menu offers removal from the **originating** owned playlist only if the per-entry setVideoId is known, preventing accidental removal of another duplicate entry.
+- Listen Together control lock guards the downward stop gesture.
+- Upstream's LocaleStringsTest currently fails on incomplete localization catalogs; CI reports unit-test failures separately from APK assembly.
+
 ### Unimplemented
 **WireGuard is NOT built in yet.** This branch does not provide the Go userspace engine, JNI bridge, native libraries, encrypted .conf storage, random proxy credentials, or a WireGuard switch. HTTPS proxy authentication is also not implemented. This prototype is not a complete VPN or kill switch. Uncovered WebView requests, third-party networking, SMB, and Cast require device validation.
 

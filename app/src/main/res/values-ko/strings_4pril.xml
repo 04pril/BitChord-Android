@@ -1,0 +1,4 @@
+<resources>
+    <string name="fourpril_open_full_player_on_tap">노래 선택 시 전체 플레이어 열기</string>
+    <string name="fourpril_open_full_player_on_tap_subtitle">끄면 미니플레이어에서 시작, 켜면 전체 플레이어를 바로 엽니다.</string>
+</resources>
