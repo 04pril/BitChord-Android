@@ -58,6 +58,11 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
     @kotlin.OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate() {
         super.onCreate()
+        // The one-shot :proxy_relaunch process must not initialize native
+        // WireGuard or run any player, WorkManager, source or account setup.
+        // Its only job is to terminate the old main process and launch a new
+        // one with the newly imported profile and persisted proxy mode.
+        if (com.music.bitchord.proxy.AppProxyRelaunchActivity.isRelaunchProcess(this)) return
         // Configure before InnerTube, media playback, downloads and artwork create clients.
         val selectedRoute = com.music.bitchord.proxy.AppProxyStore.read(this)
         val tunnel = com.music.bitchord.proxy.AppWireGuard.startAtProcessLaunch(this, selectedRoute)

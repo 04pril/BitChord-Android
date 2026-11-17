@@ -71,3 +71,11 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - The new button opens the same built-in WireGuard/HTTP/SOCKS5 editor as Settings and the first-run welcome screen. It does not open a separate browser.
 - The signed-in Home banner stays absent. SharedUi callers without a proxy callback retain their original single-action banner behavior.
 - Changing mode or importing a WireGuard .conf needs a full BitChord process restart before Google login; the WebView guard prevents a stale route from silently connecting directly.
+
+
+## Automatic full-process restart after .conf import
+- After a **successful** WireGuard .conf import, native validation and encrypted AtomicFile write, automatically persist Built-in WireGuard mode using synchronous SharedPreferences.commit() (never a pending async .apply()).
+- Show a non-dismissible localized Material3 AlertDialog: "프록시 적용을 위해 앱을 재시작합니다." / "알겠습니다". No cancel/back/outside-dismiss action. Failed/canceled imports never restart.
+- Confirmation opens a one-shot, nonexported `:proxy_relaunch` Activity in a distinct process, which terminates the old main process and launches the app's MainActivity as a new process. This guarantees AppWireGuard.startAtProcessLaunch can load the newly stored profile, rather than only recreating the Activity with the old frozen Http/WebView transport.
+- BitChordApplication skips normal startup work in the short-lived relaunch helper process. This is not an Android system VPN and no WireGuard handshake/Google-login egress verification is implied.
+- Other changes made by tapping Save without importing a profile continue to require a full process restart.

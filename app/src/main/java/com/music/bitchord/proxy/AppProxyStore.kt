@@ -63,6 +63,10 @@ object AppProxyStore {
             // Never persist the randomly bound WireGuard port.
             .putString("host", if (checked.kind == AppProxyKind.WIREGUARD_LOCAL) "" else checked.host)
             .putInt("port", if (checked.kind == AppProxyKind.WIREGUARD_LOCAL) 0 else checked.port)
-            .apply()
+            .commit().also { saved ->
+                // When relaunching immediately, async apply() could lose the
+                // selected mode before it reaches disk.
+                check(saved) { "Could not persist proxy mode before restart" }
+            }
     }
 }

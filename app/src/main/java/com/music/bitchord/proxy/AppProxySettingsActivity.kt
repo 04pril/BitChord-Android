@@ -12,6 +12,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.DialogProperties
+import com.music.bitchord.R
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.AppProxyKind
@@ -35,6 +38,9 @@ class AppProxySettingsActivity : ComponentActivity() {
                 mutableStateOf(WireGuardProfileStore.hasProfile(this@AppProxySettingsActivity))
             }
             var notice by remember { mutableStateOf<String?>(null) }
+            // The persisted profile is only active after a full process restart.
+            // Do not allow dismissing the dialog without relaunching BitChord.
+            var restartRequired by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
             val profileImporter = rememberLauncherForActivityResult(
@@ -63,7 +69,8 @@ class AppProxySettingsActivity : ComponentActivity() {
                             AppProxyStore.save(this@AppProxySettingsActivity, wireGuardRoute)
                             initial = wireGuardRoute
                             profileInstalled = true
-                            notice = "WireGuard selected. Fully restart BitChord to apply."
+                            notice = null
+                            restartRequired = true
                         } catch (_: Exception) {
                             // Do not display parser exceptions or raw profile text.
                             notice = "Import failed. Check .conf format, keys, and secure storage."
@@ -77,6 +84,29 @@ class AppProxySettingsActivity : ComponentActivity() {
             MaterialTheme(
                 colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
             ) {
+                if (restartRequired) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        properties = DialogProperties(
+                            dismissOnBackPress = false,
+                            dismissOnClickOutside = false,
+                        ),
+                        title = { Text(stringResource(R.string.fourpril_proxy_restart_title)) },
+                        text = { Text(stringResource(R.string.fourpril_proxy_restart_message)) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    // A second process closes this entire process
+                                    // and opens a clean one. Activity.recreate()
+                                    // leaves the old WireGuard and OkHttp route.
+                                    AppProxyRelaunchActivity.restartFrom(this@AppProxySettingsActivity)
+                                },
+                            ) {
+                                Text(stringResource(R.string.fourpril_proxy_restart_confirm))
+                            }
+                        },
+                    )
+                }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -186,7 +216,7 @@ private fun AppProxyEditor(
             Text("Google login WebView will use the same app-local tunnel. " +
                 "WebView proxy authentication and external IP require on-device verification.")
         }
-        Text("Save, close BitChord completely, then reopen it for routing changes.")
+        Text("Importing a .conf will restart BitChord after confirmation. Other proxy changes require a full process restart.")
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = {
             val route = when (selected) {
