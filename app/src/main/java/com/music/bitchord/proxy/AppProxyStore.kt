@@ -8,6 +8,7 @@ import com.music.bitchord.data.AppProxyRoute
 object AppProxyStore {
     private const val PREFS = "bitchord_app_proxy_v1"
     private const val KEY_WG_DEFAULT_MIGRATED = "wireguard_default_v2_applied"
+    private const val KEY_TWO_MODE_MIGRATED = "wireguard_only_options_v1"
 
     /** The new default is app-local WireGuard, never unauthenticated direct traffic. */
     private val defaultWireGuard = AppProxyRoute(
@@ -36,6 +37,24 @@ object AppProxyStore {
             changes.apply()
         }
 
+        // Legacy HTTP/SOCKS5 options are no longer offered. Migrate those
+        // saved choices ONCE so the UI never says "Off" while an old external
+        // proxy is still active. A saved .conf takes precedence; otherwise use
+        // explicit Direct. Unknown or corrupted modes continue to fail closed.
+        if (!prefs.getBoolean(KEY_TWO_MODE_MIGRATED, false)) {
+            val legacy = prefs.getString("mode", null)
+            val changes = prefs.edit().putBoolean(KEY_TWO_MODE_MIGRATED, true)
+            if (legacy == AppProxyKind.HTTP.name || legacy == AppProxyKind.SOCKS5.name) {
+                val newMode = if (WireGuardProfileStore.hasProfile(context)) {
+                    AppProxyKind.WIREGUARD_LOCAL.name
+                } else {
+                    AppProxyKind.DIRECT.name
+                }
+                changes.putString("mode", newMode).putString("host", "").putInt("port", 0)
+            }
+            changes.commit()
+        }
+
         val kind = prefs.getString("mode", null)
             ?: AppProxyKind.WIREGUARD_LOCAL.name
         return runCatching {
@@ -59,6 +78,7 @@ object AppProxyStore {
         val checked = route.validated()
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_WG_DEFAULT_MIGRATED, true)
+            .putBoolean(KEY_TWO_MODE_MIGRATED, true)
             .putString("mode", checked.kind.name)
             // Never persist the randomly bound WireGuard port.
             .putString("host", if (checked.kind == AppProxyKind.WIREGUARD_LOCAL) "" else checked.host)

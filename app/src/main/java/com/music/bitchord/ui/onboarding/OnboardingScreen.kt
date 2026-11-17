@@ -110,6 +110,8 @@ fun OnboardingScreen(
     onSignIn: () -> Unit,
     /** Opens the .conf file picker directly; no settings screen. */
     onPickWireGuardConf: () -> Unit,
+    confImportError: String? = null,
+    confImporting: Boolean = false,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -182,6 +184,8 @@ fun OnboardingScreen(
                 when (shown) {
                     PAGE_PROXY -> ProxyPage(
                         onPickWireGuardConf = onPickWireGuardConf,
+                        importError = confImportError,
+                        importing = confImporting,
                         onNext = { if (proxyReady) page = PAGE_NAME },
                         proxyReady = proxyReady,
                     )
@@ -232,6 +236,8 @@ private fun OnboardingPage(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun ColumnScope.ProxyPage(
     onPickWireGuardConf: () -> Unit,
+    importError: String?,
+    importing: Boolean,
     onNext: () -> Unit,
     proxyReady: Boolean,
 ) {
@@ -253,10 +259,24 @@ private fun ColumnScope.ProxyPage(
     )
     Spacer(Modifier.weight(1f))
     PillButton(
-        label = stringResource(R.string.fourpril_pick_conf_button),
+        label = stringResource(
+            if (importing) R.string.fourpril_conf_importing
+            else R.string.fourpril_pick_conf_button,
+        ),
         onClick = onPickWireGuardConf,
         primary = true,
+        enabled = !importing,
     )
+    if (importError != null) {
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = importError,
+            color = Color(0xFFFFD8D8),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     Spacer(Modifier.height(10.dp))
     Text(
         text = stringResource(R.string.fourpril_onboarding_proxy_restart_hint),

@@ -5412,6 +5412,8 @@ private fun BitChordApp(
                 onNameChosen = ListenTogether::setNickname,
                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
                 onPickWireGuardConf = firstRunConfImport.openConf,
+                confImportError = firstRunConfImport.error,
+                confImporting = firstRunConfImport.importing,
                 onFinish = AppSettings::setOnboardingComplete,
             )
         }

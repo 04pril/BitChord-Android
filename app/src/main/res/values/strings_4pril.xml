@@ -18,5 +18,6 @@
     <string name="fourpril_conf_missing">No WireGuard .conf yet</string>
     <string name="fourpril_conf_extension_error">Please select a .conf file.</string>
     <string name="fourpril_conf_import_error">Could not import this configuration.</string>
+    <string name="fourpril_conf_importing">Importing .conf…</string>
     <string name="fourpril_conf_engine_error">WireGuard is unavailable on this device.</string>
 </resources>
