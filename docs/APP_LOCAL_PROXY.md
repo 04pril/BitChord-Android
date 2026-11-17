@@ -57,3 +57,10 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - Original audio/resolver/queue logic is unchanged. For a song tap with the full-player preference enabled, the host opens the sheet **synchronously**, presenting a temporary metadata-only tap preview while the existing Media3 queue is built. A matching live player item replaces the preview; a 4s fail-safe clears stale previews.
 - Downward mini-player gestures now track the finger at draw time, translating down and shrinking smoothly (up to 26%) with a subtle fade. If released before the original 72dp stop threshold, the pill springs back. If released past the threshold, it finishes a 190ms ease-out and only then calls pause+stop+clearMediaItems. Works through the shared detector on normal and Liquid Glass mini-players; locked Listen Together controls rebound rather than stopping.
 - Playlist deletion was confirmed functional by the tester and is intentionally untouched in this revision.
+
+
+## Onboarding login: configure WireGuard first (2026-11-17)
+- On the initial `Connect to YouTube Music` welcome screen, a `Configure WireGuard / proxy` button now appears **above** the Google sign-in button. It opens the existing built-in settings activity to import a WireGuard .conf and select mode, rather than any external login browser or patcher.
+- The welcome flow remains after returning from settings; the user can fully restart BitChord (process restart, not activity-only) before Google login to activate the mode. The UI gives a short Korean/English restart notice.
+- The Google login WebView now refuses to start if the persisted proxy mode/endpoint differs from the already-frozen process route, preventing Google authentication from silently using the old direct connection immediately after changing a proxy in onboarding.
+- If WireGuard was selected but native startup has not succeeded, the WebView is also blocked rather than opening a direct route. Real-device WebView 407 auth and external IP verification are still required.

@@ -5384,6 +5384,11 @@ private fun BitChordApp(
                 },
                 onNameChosen = ListenTogether::setNickname,
                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                onConfigureProxy = {
+                    context.startActivity(
+                        Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
+                    )
+                },
                 onFinish = AppSettings::setOnboardingComplete,
             )
         }

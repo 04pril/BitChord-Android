@@ -15,6 +15,14 @@ import kotlin.coroutines.resume
 object AppProxyWebView {
     suspend fun prepare(context: Context): Boolean {
         val route = Http.configuredRoute // process-frozen route, not unsaved editor state
+        val saved = AppProxyStore.read(context)
+        // Importing a .conf or switching modes during onboarding updates
+        // preferences but DOES NOT reconfigure OkHttp/native/WebView until
+        // the app process restarts. Prevent a Google login from using the old
+        // direct route before the chosen WireGuard mode has taken effect.
+        if (saved.kind != route.kind) return false
+        if (saved.kind != AppProxyKind.WIREGUARD_LOCAL && saved != route) return false
+        if (saved.kind == AppProxyKind.WIREGUARD_LOCAL && !AppWireGuard.isReady) return false
         if (route.kind == AppProxyKind.DIRECT) return true
         // If a selected native tunnel could not start, never show the Google
         // login screen with a possibly direct or unprotected WebView route.

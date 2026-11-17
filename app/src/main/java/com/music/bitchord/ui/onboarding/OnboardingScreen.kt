@@ -100,6 +100,8 @@ fun OnboardingScreen(
     onNameChosen: (String) -> Unit,
     /** Opens the Google sign-in. The caller finishes onboarding once it lands. */
     onSignIn: () -> Unit,
+    /** Opens the built-in WireGuard / proxy setup before Google sign-in. */
+    onConfigureProxy: () -> Unit,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -179,6 +181,7 @@ fun OnboardingScreen(
                     )
                     else -> ConnectPage(
                         onBack = { page = PAGE_NAME },
+                        onConfigureProxy = onConfigureProxy,
                         onSignIn = onSignIn,
                         onSkip = onFinish,
                     )
@@ -260,6 +263,7 @@ private fun ColumnScope.NamePage(
 @Composable
 private fun ColumnScope.ConnectPage(
     onBack: () -> Unit,
+    onConfigureProxy: () -> Unit,
     onSignIn: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -278,6 +282,23 @@ private fun ColumnScope.ConnectPage(
 
     Spacer(Modifier.weight(1f))
 
+    // The first-run login browser has its own network stack. Offer proxy
+    // configuration before Google sign-in instead of only burying it in
+    // Settings, where a new user cannot get to it from this full-screen sheet.
+    PillButton(
+        label = stringResource(R.string.fourpril_onboarding_proxy_setup),
+        onClick = onConfigureProxy,
+        primary = false,
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = stringResource(R.string.fourpril_onboarding_proxy_restart_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = Color.White.copy(alpha = 0.82f),
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+    )
+    Spacer(Modifier.height(14.dp))
     PillButton(
         label = stringResource(R.string.onboarding_sign_in_google),
         onClick = onSignIn,
