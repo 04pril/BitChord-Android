@@ -128,6 +128,9 @@ fun HomeScreen(
     onFestiveLogoClick: (() -> Unit)? = null,
     signedIn: Boolean = true,
     onSignIn: (() -> Unit)? = null,
+    /** Optional proxy settings shortcut beside Google sign-in in the Home banner. */
+    onConfigureProxy: (() -> Unit)? = null,
+    proxyLabel: String = "Proxy",
     /**
      * Holding a card rather than tapping it. Every card on the feed answers,
      * whichever kind it is: the caller reads the item the same way it does for
@@ -198,6 +201,8 @@ fun HomeScreen(
                     // recomposes the banner alone.
                     SignInBanner(
                         onSignIn = onSignIn,
+                        onConfigureProxy = onConfigureProxy,
+                        proxyLabel = proxyLabel,
                         modifier = Modifier.padding(bottom = 8.dp),
                         motion = LocalArtworkMotion.current && !listState.isScrollInProgress,
                     )

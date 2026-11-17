@@ -64,3 +64,10 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - The welcome flow remains after returning from settings; the user can fully restart BitChord (process restart, not activity-only) before Google login to activate the mode. The UI gives a short Korean/English restart notice.
 - The Google login WebView now refuses to start if the persisted proxy mode/endpoint differs from the already-frozen process route, preventing Google authentication from silently using the old direct connection immediately after changing a proxy in onboarding.
 - If WireGuard was selected but native startup has not succeeded, the WebView is also blocked rather than opening a direct route. Real-device WebView 407 auth and external IP verification are still required.
+
+
+## Signed-out Home: Proxy button next to Google sign-in (2026-11-17)
+- When Home is shown without a signed-in Google account, the existing mesh login banner now has **two independent pills in one row**: `Sign in with Google` and a compact `Proxy / 프록시` button to its right.
+- The new button opens the same built-in WireGuard/HTTP/SOCKS5 editor as Settings and the first-run welcome screen. It does not open a separate browser.
+- The signed-in Home banner stays absent. SharedUi callers without a proxy callback retain their original single-action banner behavior.
+- Changing mode or importing a WireGuard .conf needs a full BitChord process restart before Google login; the WebView guard prevents a stale route from silently connecting directly.

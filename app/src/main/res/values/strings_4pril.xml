@@ -3,4 +3,5 @@
     <string name="fourpril_open_full_player_on_tap_subtitle">Off: start in mini-player. On: open Now Playing immediately.</string>
     <string name="fourpril_onboarding_proxy_setup">Configure WireGuard / proxy</string>
     <string name="fourpril_onboarding_proxy_restart_hint">Set up the proxy first. After importing a .conf, fully restart BitChord before Google sign-in.</string>
+    <string name="fourpril_home_proxy_button">Proxy</string>
 </resources>

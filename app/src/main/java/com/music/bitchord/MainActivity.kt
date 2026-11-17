@@ -3425,6 +3425,12 @@ private fun BitChordApp(
                                 onFestiveLogoClick = { showDiwali = true },
                                 signedIn = signedIn,
                                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                                onConfigureProxy = {
+                                    context.startActivity(
+                                        Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
+                                    )
+                                },
+                                proxyLabel = stringResource(R.string.fourpril_home_proxy_button),
                                 onItemClick = { item, shelfTitle ->
                                     val song = shelfSong(item)
                                     // Hoisted because ShelfItem lives in :shared, and

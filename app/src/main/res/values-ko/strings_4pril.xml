@@ -3,4 +3,5 @@
     <string name="fourpril_open_full_player_on_tap_subtitle">끄면 미니플레이어에서 시작, 켜면 전체 플레이어를 바로 엽니다.</string>
     <string name="fourpril_onboarding_proxy_setup">WireGuard / 프록시 먼저 설정</string>
     <string name="fourpril_onboarding_proxy_restart_hint">.conf를 가져온 뒤 앱을 완전히 종료하고 다시 실행해야 Google 로그인에도 적용됩니다.</string>
+    <string name="fourpril_home_proxy_button">프록시</string>
 </resources>
