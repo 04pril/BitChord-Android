@@ -6,10 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -143,11 +141,15 @@ private val ART_CORNER = 8.dp
 /** Distance that makes a horizontal drag an intentional track change. */
 private val TRACK_SWIPE_THRESHOLD = 72.dp
 
-/** Downward distance required to stop playback and dismiss the mini-player. */
-private val STOP_SWIPE_THRESHOLD = 72.dp
+/** Intentional swipe distance: the nav pill is immediately below this bar. */
+private val STOP_SWIPE_THRESHOLD = 36.dp
 
-/** Full finger-following shrink distance before the mini-player fades out. */
-private val STOP_DISMISS_TRAVEL = 224.dp
+/**
+ * Standard mini-player -> floating tabs: about 8dp separation plus half
+ * each pill's height. A 68dp trip overlaps the bars instead of falling
+ * through the entire screen. Glass inline has a smaller 44dp target.
+ */
+private val STOP_NAV_MERGE_DISTANCE = 68.dp
 
 /**
  * How much further a drag may go sideways than up and still be a pull. A
@@ -222,6 +224,8 @@ internal fun Modifier.miniPlayerGestures(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onStopAndDismiss: () -> Unit,
+    /** How far this bar moves to be absorbed by its tab pill. */
+    stopTravel: Dp = STOP_NAV_MERGE_DISTANCE,
     /** Listening in a party whose host holds the controls. Swipes say so instead of skipping. */
     locked: Boolean = false,
     onBlocked: () -> Unit = {},
@@ -244,9 +248,10 @@ internal fun Modifier.miniPlayerGestures(
     // Kept at draw time so dragging never recomposes the player or its artwork.
     val dismiss = remember { mutableFloatStateOf(0f) }
     val dismissSettle = remember { arrayOfNulls<Job>(1) }
-    return pointerInput(Unit) {
+    return pointerInput(stopTravel) {
         val trackThreshold = TRACK_SWIPE_THRESHOLD.toPx()
         val stopThreshold = STOP_SWIPE_THRESHOLD.toPx()
+        val destination = stopTravel.toPx()
         val liftEase = PULL_LIFT_EASE.toPx()
         val maxVelocity = viewConfiguration.maximumFlingVelocity
         awaitEachGesture {
@@ -288,14 +293,19 @@ internal fun Modifier.miniPlayerGestures(
                 }
                 val confirmed = finished && dragged >= stopThreshold
                 if (confirmed && !currentLocked) {
-                    val finishAt = maxOf(dragged + 48.dp.toPx(), STOP_DISMISS_TRAVEL.toPx())
-                    // Keep the audio playing for the short finish animation;
-                    // then stop+clear the queue so no bar flashes back.
+                    // Merge into the actual neighbouring tab pill, not a
+                    // 224dp off-screen exit. A short, firm spring makes the
+                    // bar look drawn into the tab controls. Keep the existing
+                    // stop+clear callback *after* the surface vanishes.
+                    val finishAt = maxOf(dragged + 4.dp.toPx(), destination)
                     dismissSettle[0] = scope.launch {
                         animate(
                             initialValue = dismiss.floatValue,
                             targetValue = finishAt,
-                            animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing),
+                            animationSpec = spring(
+                                dampingRatio = 0.82f,
+                                stiffness = 780f,
+                            ),
                         ) { value, _ -> dismiss.floatValue = value }
                         currentOnStopAndDismiss()
                     }
@@ -308,8 +318,8 @@ internal fun Modifier.miniPlayerGestures(
                             initialValue = dismiss.floatValue,
                             targetValue = 0f,
                             animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMedium,
+                                dampingRatio = 0.74f,
+                                stiffness = 640f,
                             ),
                         ) { value, _ -> dismiss.floatValue = value }
                     }
@@ -372,12 +382,15 @@ internal fun Modifier.miniPlayerGestures(
         }
     }.graphicsLayer {
         val down = dismiss.floatValue
-        val progress = (down / STOP_DISMISS_TRAVEL.toPx()).coerceIn(0f, 1f)
-        val scale = 1f - 0.26f * progress
-        translationY = down - lift.floatValue
-        scaleX = scale
-        scaleY = scale
-        alpha = 1f - progress * progress
+        val progress = (down / stopTravel.toPx()).coerceIn(0f, 1f)
+        // Draw-only layer transforms: no change to Liquid Glass/Haze blur,
+        // bottom tab animation, layout measurement, or composable structure.
+        // Late compression makes the capsule feel absorbed by the lower pill.
+        val merge = progress * progress * (3f - 2f * progress)
+        translationY = down.coerceAtMost(stopTravel.toPx()) - lift.floatValue
+        scaleX = 1f - 0.48f * merge
+        scaleY = 1f - 0.56f * merge
+        alpha = 1f - merge
     }
 }
 

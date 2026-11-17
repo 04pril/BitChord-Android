@@ -96,3 +96,12 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - SAF picks by MIME and cannot guarantee a filename extension-only visible list. To avoid hiding valid .conf files with provider-dependent MIME, the picker allows all MIME types, but **only a document with OpenableColumns.DISPLAY_NAME ending in .conf** (case insensitive) is accepted. Invalid file extensions are rejected BEFORE reading, parsing or storing; no restart occurs.
 - After .conf native validation and AndroidKeyStore-encrypted write, the shared importer persists WireGuard mode synchronously, shows the mandatory "프록시 적용을 위해 앱을 재시작합니다." / "알겠습니다" dialog and uses the separate process relaunch. Import behavior and failure semantics are identical from onboarding and the regular proxy editor.
 - Existing playback engine, Google login WebView proxy routing, main tab login+proxy buttons, and mini-player animation are unchanged.
+
+
+## R8-optimized APK + mini-player/nav merge (2026-11-17)
+- **No edits** to upstream Liquid Glass, Haze/blur, bottom navigation animations or audio engine. The existing Compose draw-only mini-player gesture layer is the only animated code changed.
+- Down-swipe destination is the nearby floating tab pill: ~68dp in standard/expanded mode, ~44dp in inline Liquid Glass, versus the previous 224dp offscreen throw. An intentional 36dp drag commits stop; release uses a stiff 780f/0.82 spring and late squash/fade into the nav pill. A cancelled drag springs back at 640f/0.74. Media3 stop+clear remains delayed until after the merge.
+- New song-tap -> full player preference defaults ON only if no saved setting exists. Saved user ON/OFF values are respected.
+- A new Gradle `optimized` buildType copies the unchanged upstream `release` R8 minification/resource shrinking settings, and uses test debug signing without changing `com.dev.bitchord` package ID. CI assembles `app:assembleDevOptimized` and publishes **R8-OPT**-named APKs instead of the slower `devDebug`.
+- GitHub-hosted debug signing certificates can differ across builds; an install "app not installed"/signature conflict may require uninstalling the older build. Export/reimport the WireGuard .conf as necessary because uninstalling removes saved settings and AndroidKeyStore keys. A persistent signing key in GitHub secrets is preferable for stable updates, but is not configured by this change.
+- Build success is not a measured FPS improvement. Test on device: visible UI frame pacing, R8 compatibility, Google sign-in, proxy tunnel startup and playback.

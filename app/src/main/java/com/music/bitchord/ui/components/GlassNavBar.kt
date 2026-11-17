@@ -360,6 +360,9 @@ private fun GlassNowPlaying(
                     onPrevious()
                 },
                 onStopAndDismiss = onStopAndDismiss,
+                // In collapsed Liquid Glass the accessory already shares
+                // the navigation row; avoid dragging it past the whole bar.
+                stopTravel = if (isInline) 44.dp else 68.dp,
                 locked = controlsLocked,
                 onBlocked = onBlockedControl,
             )

@@ -63,22 +63,26 @@ jobs:
           mkdir -p app/src/main/assets/wireguard/licenses
           cp wireguard-source/LICENSE wireguard-source/NOTICE app/src/main/assets/wireguard/licenses/
           cp -a wireguard-source/native/wireguard/licenses/. app/src/main/assets/wireguard/licenses/
-      - name: Assemble standalone installable dev APK
-        run: bash ./gradlew --no-daemon :app:assembleDevDebug
+      # A devDebug APK does not run the upstream R8 optimisations and
+      # significantly overstates the UI jank compared with a normal release.
+      # Keep the dev package ID but build the release-equivalent, minified,
+      # resource-shrunk optimized variant. All original rendering code stays.
+      - name: Assemble R8-optimized direct-install development APK
+        run: bash ./gradlew --no-daemon :app:assembleDevOptimized
       - name: Run unit tests (report locale completeness failures separately)
         continue-on-error: true
         run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest
       - name: Collect clearly labeled test APKs
         run: |
           mkdir -p distribution
-          for apk in app/build/outputs/apk/dev/debug/*.apk; do
+          for apk in app/build/outputs/apk/dev/optimized/*.apk; do
             test -f "$apk" || continue
             case "$(basename "$apk")" in *armeabi-v7a*) continue ;; esac
             if ! unzip -Z1 "$apk" | grep -Eq 'lib/(arm64-v8a|x86_64)/libmorphewireguard[.]so'; then
               echo "WireGuard native library missing from $apk" >&2
               exit 1
             fi
-            cp "$apk" "distribution/BitChord-4pril-WG-TEST-${GITHUB_RUN_NUMBER}-$(basename "$apk")"
+            cp "$apk" "distribution/BitChord-4pril-WG-R8-OPT-${GITHUB_RUN_NUMBER}-$(basename "$apk")"
           done
           ls distribution/*.apk
           sha256sum distribution/*.apk > distribution/SHA256SUMS.txt
@@ -99,10 +103,10 @@ jobs:
           gh release create "$tag" distribution/* --target "$GITHUB_SHA" \
             --title "4pril BitChord Android TEST #${GITHUB_RUN_NUMBER}" \
             --prerelease \
-            --notes "Development APK with userspace WireGuard native engine inside the APK (arm64-v8a / x86_64). User imports WireGuard .conf in settings. Existing audio engine unchanged. Google login WebView proxy authentication requires real-device verification. Not a system-wide VPN, no Morphe patcher."
+            --notes "R8-optimized standalone Android development APK with built-in WireGuard (arm64-v8a / x86_64). Original Liquid Glass/blur/player engines unchanged. Default song tap opens full player. Mini-player swipes into bottom tabs and stops playback. This build is signed with the runner's debug key; if update fails due to certificate mismatch, back up your .conf and reinstall. Login WebView egress remains device-unverified."
       - name: Publish prerelease on tag
         if: startsWith(github.ref, 'refs/tags/4pril-android-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" distribution/* --title "4pril Android TEST $GITHUB_REF_NAME" --prerelease --notes "Direct-install development APK including native userspace WireGuard. Google sign-in WebView requires real-device verification."
+          gh release create "$GITHUB_REF_NAME" distribution/* --title "4pril Android TEST $GITHUB_REF_NAME" --prerelease --notes "R8-optimized Android development APK including native userspace WireGuard. Google sign-in WebView requires real-device verification."

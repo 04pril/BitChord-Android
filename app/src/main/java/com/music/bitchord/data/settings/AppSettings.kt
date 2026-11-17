@@ -463,8 +463,8 @@ object AppSettings {
     /** Swiping a song row plays it next instead of adding it to the end of the queue. */
     val swipeToPlayNext = MutableStateFlow(false)
 
-    /** Tapping a song opens Now Playing; false preserves upstream mini-player behavior. */
-    val openFullPlayerOnSongTap = MutableStateFlow(false)
+    /** Open Now Playing on song tap by default; explicit user choices still persist. */
+    val openFullPlayerOnSongTap = MutableStateFlow(true)
 
     /** Once a song has been suggested or played this session, AutoPlay won't offer it again. */
     val dontRepeatSuggestions = MutableStateFlow(false)
@@ -1035,7 +1035,7 @@ object AppSettings {
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)
         showQueueHistory.value = prefs.getBoolean(KEY_SHOW_QUEUE_HISTORY, false)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
-        openFullPlayerOnSongTap.value = prefs.getBoolean(KEY_OPEN_FULL_PLAYER_ON_SONG_TAP, false)
+        openFullPlayerOnSongTap.value = prefs.getBoolean(KEY_OPEN_FULL_PLAYER_ON_SONG_TAP, true)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
         preferMusicOnly.value = prefs.getBoolean(KEY_PREFER_MUSIC_ONLY, false)
         hideRecents.value = prefs.getBoolean(KEY_HIDE_RECENTS, false)
