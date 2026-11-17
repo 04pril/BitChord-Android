@@ -88,3 +88,11 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - If WireGuard is absent/unready, the first screen remains available to correct the profile; it does not mistakenly show Google sign-in over an old DIRECT connection. A user explicitly selecting Direct or HTTP/SOCKS5 must ensure a full process restart before advancing, so the applied route matches the choice.
 - The previously added proxy button alongside Google sign-in on the welcome ConnectPage is removed because the separate first step now covers setup. The signed-out Home banner's proxy shortcut remains unchanged.
 - The login WebView retains its route-readiness and fail-closed checks. A running local listener alone does **not** prove successful remote WireGuard handshake or that Google login egress is tunneled; this still needs actual device tests.
+
+
+## Compact WireGuard settings and direct .conf onboarding (2026-11-17)
+- The in-app proxy editor now has exactly two selectable modes: Off and Use WireGuard proxy. The former HTTP and SOCKS5 radio choices, host/port inputs and explanatory paragraphs are removed from the UI. A small encrypted-profile status, .conf import button and Apply button remain. Selecting a mode and applying triggers the same process-restart confirmation.
+- The first-install onboarding no longer opens AppProxySettingsActivity. Its single CTA is now "WireGuard .conf 파일 찾기", wired directly to the SAF document picker registered by the MainActivity Compose tree.
+- SAF picks by MIME and cannot guarantee a filename extension-only visible list. To avoid hiding valid .conf files with provider-dependent MIME, the picker allows all MIME types, but **only a document with OpenableColumns.DISPLAY_NAME ending in .conf** (case insensitive) is accepted. Invalid file extensions are rejected BEFORE reading, parsing or storing; no restart occurs.
+- After .conf native validation and AndroidKeyStore-encrypted write, the shared importer persists WireGuard mode synchronously, shows the mandatory "프록시 적용을 위해 앱을 재시작합니다." / "알겠습니다" dialog and uses the separate process relaunch. Import behavior and failure semantics are identical from onboarding and the regular proxy editor.
+- Existing playback engine, Google login WebView proxy routing, main tab login+proxy buttons, and mini-player animation are unchanged.

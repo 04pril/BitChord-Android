@@ -108,8 +108,8 @@ fun OnboardingScreen(
     onNameChosen: (String) -> Unit,
     /** Opens the Google sign-in. The caller finishes onboarding once it lands. */
     onSignIn: () -> Unit,
-    /** Opens the built-in WireGuard / proxy setup before Google sign-in. */
-    onConfigureProxy: () -> Unit,
+    /** Opens the .conf file picker directly; no settings screen. */
+    onPickWireGuardConf: () -> Unit,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -181,7 +181,7 @@ fun OnboardingScreen(
             OnboardingPage {
                 when (shown) {
                     PAGE_PROXY -> ProxyPage(
-                        onConfigureProxy = onConfigureProxy,
+                        onPickWireGuardConf = onPickWireGuardConf,
                         onNext = { if (proxyReady) page = PAGE_NAME },
                         proxyReady = proxyReady,
                     )
@@ -231,7 +231,7 @@ private fun OnboardingPage(content: @Composable ColumnScope.() -> Unit) {
  */
 @Composable
 private fun ColumnScope.ProxyPage(
-    onConfigureProxy: () -> Unit,
+    onPickWireGuardConf: () -> Unit,
     onNext: () -> Unit,
     proxyReady: Boolean,
 ) {
@@ -253,8 +253,8 @@ private fun ColumnScope.ProxyPage(
     )
     Spacer(Modifier.weight(1f))
     PillButton(
-        label = stringResource(R.string.fourpril_onboarding_proxy_setup),
-        onClick = onConfigureProxy,
+        label = stringResource(R.string.fourpril_pick_conf_button),
+        onClick = onPickWireGuardConf,
         primary = true,
     )
     Spacer(Modifier.height(10.dp))

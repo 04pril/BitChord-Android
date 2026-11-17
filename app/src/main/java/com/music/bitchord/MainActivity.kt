@@ -350,6 +350,8 @@ import com.music.bitchord.ui.screens.MoodGenrePlaylistsScreen
 import com.music.bitchord.ui.screens.SearchScreen
 import com.music.bitchord.data.settings.SongSort
 import com.music.bitchord.ui.onboarding.OnboardingScreen
+import com.music.bitchord.proxy.rememberWireGuardImportUiState
+import com.music.bitchord.proxy.WireGuardImportRestartDialog
 import com.music.bitchord.ui.festive.DiwaliGate
 import com.music.bitchord.ui.festive.DiwaliGreetingScreen
 import com.music.bitchord.ui.replay.ReplayScreen
@@ -529,6 +531,9 @@ private fun BitChordApp(
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    // Registered once at the app root so first-run onboarding can open the
+    // Android document picker without ever navigating to a settings Activity.
+    val firstRunConfImport = rememberWireGuardImportUiState()
     val clipboard = LocalClipboardManager.current
     val hazeState = remember { HazeState() }
     // Recording the backdrop layer costs a draw pass, so it only runs when a
@@ -5406,14 +5411,14 @@ private fun BitChordApp(
                 },
                 onNameChosen = ListenTogether::setNickname,
                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
-                onConfigureProxy = {
-                    context.startActivity(
-                        Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
-                    )
-                },
+                onPickWireGuardConf = firstRunConfImport.openConf,
                 onFinish = AppSettings::setOnboardingComplete,
             )
         }
+
+        // Same forced, full-process restart flow as importing from Settings.
+        // This dialog belongs to the main Activity, not the onboarding page.
+        WireGuardImportRestartDialog(firstRunConfImport)
 
         // ---- Google sign-in (full screen WebView) ----
         webSession?.let { mode ->
