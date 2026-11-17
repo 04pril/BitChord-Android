@@ -34,3 +34,13 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 4. Ensure actual Google login WebView works through the proxy.
 5. Invalid configuration blocks traffic and direct mode can be restored.
 6. Validate HTTPS, IPv4/IPv6, connectivity switches, cached audio and other clients.
+
+
+## Built-in WireGuard and Google login WebView (2026-11-17)
+- The v1.9.1 app already has an in-app Google login WebView; no external browser or Morphe patcher is used.
+- Settings > Audio quality > App-local proxy supports importing a .conf via SAF. Configuration is validated using the pinned native engine and stored AES-GCM encrypted in noBackupFilesDir with its key in AndroidKeyStore.
+- Select Built-in WireGuard and fully restart BitChord. The native Go engine binds an authenticated random localhost port; a per-process random token is used for OkHttp proxy challenges. The Android VPN slot is untouched.
+- Before the login WebView starts, an AndroidX WebKit process-wide proxy override is applied, with implicit localhost-bypass rules removed. A 5-second timeout and native-startup check fail closed.
+- WebViewClient answers HTTP-auth challenges **only** when host=127.0.0.1 and realm=App WireGuard. On a 407 or proxy connection error, it blocks login rather than bypassing. **Not all WebView providers expose proxy 407 challenges to this callback; real-device Android WebView compatibility is unverified.** A successful Google login alone does not prove tunneled IP — independently verify DNS and egress IP on-device.
+- Native build uses Go 1.26.10 and NDK 28.2.13676358; no binary artifact is claimed until GitHub Actions compiles and packages the .so.
+- Protected network paths still need on-device validation (including Google sign-in, cookies/redirects, playback, and download). No system-wide kill switch is claimed.

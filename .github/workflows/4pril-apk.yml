@@ -48,6 +48,12 @@ jobs:
       - name: Build embedded WireGuard (arm64-v8a and x86_64)
         run: |
           test "$(git -C wireguard-source rev-parse HEAD)" = d03b7439f517eeed13d12edc1f922ee0e640cd13
+          # Hosted runners may set ANDROID_NDK_HOME to an older NDK.
+          # The native script prioritizes that variable over ANDROID_HOME,
+          # so force the installed r28c path instead of accepting a mismatch.
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          test -f "$ANDROID_NDK_HOME/source.properties"
+          sed -n '/Pkg.Revision/p' "$ANDROID_NDK_HOME/source.properties"
           bash wireguard-source/scripts/build-wireguard-android.sh arm64-v8a x86_64
           for abi in arm64-v8a x86_64; do
             mkdir -p "app/src/main/jniLibs/$abi"
