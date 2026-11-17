@@ -88,3 +88,8 @@
 -dontwarn org.conscrypt.**
 -dontwarn com.android.org.conscrypt.**
 -dontwarn io.github.muntashirakon.adb.**
+
+# The native Go JNI implementation binds to this exact Java class.
+# Obfuscating or renaming the JNI methods breaks app-local WireGuard at runtime.
+-keep class app.morphe.extension.shared.wireguard.NativeTunnel { *; }
+-keep class app.morphe.extension.shared.wireguard.NativeTunnel$InvalidProfileException { *; }

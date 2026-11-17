@@ -141,6 +141,16 @@ private val ART_CORNER = 8.dp
 /** Distance that makes a horizontal drag an intentional track change. */
 private val TRACK_SWIPE_THRESHOLD = 72.dp
 
+/** Intentional swipe distance: the nav pill is immediately below this bar. */
+private val STOP_SWIPE_THRESHOLD = 36.dp
+
+/**
+ * Standard mini-player -> floating tabs: about 8dp separation plus half
+ * each pill's height. A 68dp trip overlaps the bars instead of falling
+ * through the entire screen. Glass inline has a smaller 44dp target.
+ */
+private val STOP_NAV_MERGE_DISTANCE = 68.dp
+
 /**
  * How much further a drag may go sideways than up and still be a pull. A
  * thumb swiping up from the bottom of the screen travels on an arc, and judged
@@ -213,6 +223,9 @@ internal fun Modifier.miniPlayerGestures(
     pull: MiniPlayerPull?,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    onStopAndDismiss: () -> Unit,
+    /** How far this bar moves to be absorbed by its tab pill. */
+    stopTravel: Dp = STOP_NAV_MERGE_DISTANCE,
     /** Listening in a party whose host holds the controls. Swipes say so instead of skipping. */
     locked: Boolean = false,
     onBlocked: () -> Unit = {},
@@ -223,6 +236,7 @@ internal fun Modifier.miniPlayerGestures(
     val currentPull by rememberUpdatedState(pull)
     val currentOnNext by rememberUpdatedState(onNext)
     val currentOnPrevious by rememberUpdatedState(onPrevious)
+    val currentOnStopAndDismiss by rememberUpdatedState(onStopAndDismiss)
     val currentLocked by rememberUpdatedState(locked)
     val currentOnBlocked by rememberUpdatedState(onBlocked)
     val scope = rememberCoroutineScope()
@@ -230,8 +244,14 @@ internal fun Modifier.miniPlayerGestures(
     // recomposing it.
     val lift = remember { mutableFloatStateOf(0f) }
     val settle = remember { arrayOfNulls<Job>(1) }
-    return pointerInput(Unit) {
+    // Animatable swipe-down layer shared by standard and Liquid Glass bars.
+    // Kept at draw time so dragging never recomposes the player or its artwork.
+    val dismiss = remember { mutableFloatStateOf(0f) }
+    val dismissSettle = remember { arrayOfNulls<Job>(1) }
+    return pointerInput(stopTravel) {
         val trackThreshold = TRACK_SWIPE_THRESHOLD.toPx()
+        val stopThreshold = STOP_SWIPE_THRESHOLD.toPx()
+        val destination = stopTravel.toPx()
         val liftEase = PULL_LIFT_EASE.toPx()
         val maxVelocity = viewConfiguration.maximumFlingVelocity
         awaitEachGesture {
@@ -239,7 +259,8 @@ internal fun Modifier.miniPlayerGestures(
             val pointer = down.id
             // Up to the slop: which way this is heading, or nothing at all.
             var start: PointerInputChange? = null
-            var vertical = false
+            var verticalUp = false
+            var verticalDown = false
             while (start == null) {
                 val change = awaitPointerEvent().changes.firstOrNull { it.id == pointer }
                     ?: return@awaitEachGesture
@@ -247,18 +268,66 @@ internal fun Modifier.miniPlayerGestures(
                 if (!change.pressed || change.isConsumed) return@awaitEachGesture
                 val moved = change.position - down.position
                 if (moved.getDistance() < viewConfiguration.touchSlop) continue
-                vertical = moved.y < 0f && abs(moved.x) < -moved.y * PULL_BIAS
-                // Downwards has nothing to do on the bar, and nor has a pull
-                // with no player to pull: left as they always were, a drag that
-                // ends inside the bar still counts as its tap.
-                if (!vertical && abs(moved.x) < abs(moved.y)) return@awaitEachGesture
-                if (vertical && currentPull == null) return@awaitEachGesture
+                verticalUp = moved.y < 0f && abs(moved.x) < -moved.y * PULL_BIAS
+                verticalDown = moved.y > 0f && abs(moved.x) < moved.y * PULL_BIAS
+                // Ambiguous diagonal gestures belong to the page behind.
+                // A down-swipe stops playback even when Reduced motion disables
+                // the sheet's up-drag animation.
+                if (!verticalUp && !verticalDown && abs(moved.x) < abs(moved.y)) return@awaitEachGesture
+                if (verticalUp && currentPull == null) return@awaitEachGesture
                 change.consume()
                 start = change
             }
             val slopped = start ?: return@awaitEachGesture
 
-            if (!vertical) {
+            if (verticalDown) {
+                dismissSettle[0]?.cancel()
+                var dragged = (slopped.position.y - down.position.y).coerceAtLeast(0f)
+                // Follow the thumb as soon as slop is crossed: slide down,
+                // shrink and fade are all one graphics layer, not 3 recompositions.
+                dismiss.floatValue = dragged
+                val finished = drag(pointer) { change ->
+                    dragged = (dragged + change.positionChange().y).coerceAtLeast(0f)
+                    dismiss.floatValue = dragged
+                    change.consume()
+                }
+                val confirmed = finished && dragged >= stopThreshold
+                if (confirmed && !currentLocked) {
+                    // Merge into the actual neighbouring tab pill, not a
+                    // 224dp off-screen exit. A short, firm spring makes the
+                    // bar look drawn into the tab controls. Keep the existing
+                    // stop+clear callback *after* the surface vanishes.
+                    val finishAt = maxOf(dragged + 4.dp.toPx(), destination)
+                    dismissSettle[0] = scope.launch {
+                        animate(
+                            initialValue = dismiss.floatValue,
+                            targetValue = finishAt,
+                            animationSpec = spring(
+                                dampingRatio = 0.82f,
+                                stiffness = 780f,
+                            ),
+                        ) { value, _ -> dismiss.floatValue = value }
+                        currentOnStopAndDismiss()
+                    }
+                } else {
+                    if (confirmed && currentLocked) currentOnBlocked()
+                    // Below the threshold (or a cancelled gesture), the pill
+                    // springs back without pausing playback.
+                    dismissSettle[0] = scope.launch {
+                        animate(
+                            initialValue = dismiss.floatValue,
+                            targetValue = 0f,
+                            animationSpec = spring(
+                                dampingRatio = 0.74f,
+                                stiffness = 640f,
+                            ),
+                        ) { value, _ -> dismiss.floatValue = value }
+                    }
+                }
+                return@awaitEachGesture
+            }
+
+            if (!verticalUp) {
                 var dragged = slopped.position.x - down.position.x
                 // Read before consuming: a consumed change reports no movement.
                 val finished = drag(pointer) { change ->
@@ -311,7 +380,18 @@ internal fun Modifier.miniPlayerGestures(
                 ) { value, _ -> lift.floatValue = value }
             }
         }
-    }.graphicsLayer { translationY = -lift.floatValue }
+    }.graphicsLayer {
+        val down = dismiss.floatValue
+        val progress = (down / stopTravel.toPx()).coerceIn(0f, 1f)
+        // Draw-only layer transforms: no change to Liquid Glass/Haze blur,
+        // bottom tab animation, layout measurement, or composable structure.
+        // Late compression makes the capsule feel absorbed by the lower pill.
+        val merge = progress * progress * (3f - 2f * progress)
+        translationY = down.coerceAtMost(stopTravel.toPx()) - lift.floatValue
+        scaleX = 1f - 0.48f * merge
+        scaleY = 1f - 0.56f * merge
+        alpha = 1f - merge
+    }
 }
 
 /**
@@ -357,6 +437,8 @@ fun MiniPlayer(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onExpand: () -> Unit,
+    /** Downward swipe stops playback and clears the queue, not merely the view. */
+    onStopAndDismiss: () -> Unit = {}, // Preview-safe; production always supplies stop-and-clear handler.
     /** @see com.music.bitchord.data.listentogether.ListenTogether.State.controlsLocked */
     controlsLocked: Boolean = false,
     onBlockedControl: () -> Unit = {},
@@ -387,6 +469,7 @@ fun MiniPlayer(
                     haptics.play(Haptic.SkipPrevious)
                     onPrevious()
                 },
+                onStopAndDismiss = onStopAndDismiss,
                 locked = controlsLocked,
                 onBlocked = onBlockedControl,
             )

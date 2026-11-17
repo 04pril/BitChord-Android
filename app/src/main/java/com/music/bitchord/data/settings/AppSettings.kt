@@ -463,6 +463,9 @@ object AppSettings {
     /** Swiping a song row plays it next instead of adding it to the end of the queue. */
     val swipeToPlayNext = MutableStateFlow(false)
 
+    /** Open Now Playing on song tap by default; explicit user choices still persist. */
+    val openFullPlayerOnSongTap = MutableStateFlow(true)
+
     /** Once a song has been suggested or played this session, AutoPlay won't offer it again. */
     val dontRepeatSuggestions = MutableStateFlow(false)
 
@@ -1032,6 +1035,7 @@ object AppSettings {
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)
         showQueueHistory.value = prefs.getBoolean(KEY_SHOW_QUEUE_HISTORY, false)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
+        openFullPlayerOnSongTap.value = prefs.getBoolean(KEY_OPEN_FULL_PLAYER_ON_SONG_TAP, true)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
         preferMusicOnly.value = prefs.getBoolean(KEY_PREFER_MUSIC_ONLY, false)
         hideRecents.value = prefs.getBoolean(KEY_HIDE_RECENTS, false)
@@ -1457,6 +1461,11 @@ object AppSettings {
     fun setSwipeToPlayNext(value: Boolean) {
         swipeToPlayNext.value = value
         prefs.edit().putBoolean(KEY_SWIPE_TO_PLAY_NEXT, value).apply()
+    }
+
+    fun setOpenFullPlayerOnSongTap(value: Boolean) {
+        openFullPlayerOnSongTap.value = value
+        prefs.edit().putBoolean(KEY_OPEN_FULL_PLAYER_ON_SONG_TAP, value).apply()
     }
 
     fun setDontRepeatSuggestions(value: Boolean) {
@@ -2296,6 +2305,7 @@ object AppSettings {
     private const val KEY_HIDE_SONG_STATUS = "hide_song_status"
     private const val KEY_SHOW_QUEUE_HISTORY = "show_queue_history"
     private const val KEY_SWIPE_TO_PLAY_NEXT = "swipe_to_play_next"
+    private const val KEY_OPEN_FULL_PLAYER_ON_SONG_TAP = "open_full_player_on_song_tap"
     private const val KEY_DONT_REPEAT_SUGGESTIONS = "dont_repeat_suggestions"
     private const val KEY_PREFER_MUSIC_ONLY = "prefer_music_only"
     private const val KEY_HIDE_RECENTS = "hide_recents"

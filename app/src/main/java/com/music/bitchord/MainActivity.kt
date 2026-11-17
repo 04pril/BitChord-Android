@@ -350,6 +350,8 @@ import com.music.bitchord.ui.screens.MoodGenrePlaylistsScreen
 import com.music.bitchord.ui.screens.SearchScreen
 import com.music.bitchord.data.settings.SongSort
 import com.music.bitchord.ui.onboarding.OnboardingScreen
+import com.music.bitchord.proxy.rememberWireGuardImportUiState
+import com.music.bitchord.proxy.WireGuardImportRestartDialog
 import com.music.bitchord.ui.festive.DiwaliGate
 import com.music.bitchord.ui.festive.DiwaliGreetingScreen
 import com.music.bitchord.ui.replay.ReplayScreen
@@ -529,6 +531,9 @@ private fun BitChordApp(
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    // Registered once at the app root so first-run onboarding can open the
+    // Android document picker without ever navigating to a settings Activity.
+    val firstRunConfImport = rememberWireGuardImportUiState()
     val clipboard = LocalClipboardManager.current
     val hazeState = remember { HazeState() }
     // Recording the backdrop layer costs a draw pass, so it only runs when a
@@ -601,6 +606,7 @@ private fun BitChordApp(
     // takes part in the docking asks for [activeDock] / this, never for the
     // dock or the motion directly.
     val reducePlayerMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val openFullPlayerOnSongTap by AppSettings.openFullPlayerOnSongTap.collectAsStateWithLifecycle()
     val activeDock = playerDock.takeIf { !reducePlayerMotion }
     playerSheetMotion.flingVelocity = with(LocalDensity.current) { PLAYER_PULL_FLING_VELOCITY.toPx() }
     // How the app takes the player down, whatever for: a back press, or a page
@@ -1188,6 +1194,22 @@ private fun BitChordApp(
     var convertedVideoId by remember { mutableStateOf<String?>(null) }
     // Optimistically updated track for instant UI updates when switching versions
     var optimisticVersionSong by remember { mutableStateOf<Song?>(null) }
+    // UI-only preview on direct song taps. The player sheet starts opening
+    // immediately, while the unmodified queue construction runs as before.
+    // Never sent into Media3 or a stream resolver.
+    var pendingTapSong by remember { mutableStateOf<Song?>(null) }
+    LaunchedEffect(player.song?.videoId, pendingTapSong?.videoId) {
+        if (pendingTapSong != null && player.song?.videoId == pendingTapSong?.videoId) {
+            pendingTapSong = null
+        }
+    }
+    LaunchedEffect(pendingTapSong?.videoId) {
+        val requestedId = pendingTapSong?.videoId ?: return@LaunchedEffect
+        // A refused or failed session command must not leave a fake
+        // Now Playing track on screen forever.
+        delay(4_000)
+        if (pendingTapSong?.videoId == requestedId) pendingTapSong = null
+    }
 
     // Lyrics follow whatever is playing; duration lands a beat after the track.
     // Keyed on the lyric settings too, so turning a source on or off, reordering
@@ -1536,9 +1558,21 @@ private fun BitChordApp(
         // never will); those can't be queued, so play the rest in their order.
         if (allSongs.getOrNull(allIndex)?.isUnresolvedSpotify == true) return
         val songs = allSongs.filterNot { it.isUnresolvedSpotify }
+        if (songs.isEmpty()) return
         val index = songs.indexOf(allSongs.getOrNull(allIndex)).coerceAtLeast(0)
+        if (refusedByHost() || controller == null) return
         playRequestGeneration++
         activeRadioSeed = null
+        // The old implementation opened *after* building the queue and
+        // dispatching Media3. Opening synchronously on tap removes that beat.
+        if (openFullPlayerOnSongTap) {
+            pendingTapSong = songs[index].copy(
+                playbackSource = source.title,
+                playbackSourceType = source.type,
+                playbackSourceId = source.id,
+            )
+            if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
+        }
         scope.launch {
             if (refusedByHost()) return@launch
             val c = controller ?: return@launch
@@ -1585,7 +1619,8 @@ private fun BitChordApp(
                     c.playSongs(result.timeline, result.startIndex)
                 }
             }
-            // Start playback in the mini-player; the user opens the full view by tapping it.
+            // The full player was already opened synchronously on the tap.
+            // OFF preserves the original mini-player-first behavior.
         }
     }
     // Kept for entry points whose rows already carry their origin (notably a
@@ -1629,6 +1664,14 @@ private fun BitChordApp(
      * where the surrounding list *is* the thing the user asked for.
      */
     val playRadio: (Song, QueueSource) -> Unit = { song, source ->
+        if (!ListenTogether.state.value.controlsLocked && controller != null && openFullPlayerOnSongTap) {
+            pendingTapSong = song.copy(
+                playbackSource = source.title,
+                playbackSourceType = source.type,
+                playbackSourceId = source.id,
+            )
+            if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
+        }
         playRequestGeneration++
         activeRadioSeed = null
         scope.launch {
@@ -1644,7 +1687,8 @@ private fun BitChordApp(
                 source = source,
             )
             c.playSongs(oneOffQueue, 0)
-            // Start radio in the mini-player; the user opens the full view by tapping it.
+            // The full player was already opened synchronously on the tap.
+            // OFF preserves the original mini-player-first behavior.
         }
     }
 
@@ -2488,7 +2532,7 @@ private fun BitChordApp(
         links = YtMusicRepository.trackLinks(current.videoId).getOrNull()
         linksLoading = false
     }
-    val playerSong = player.song?.let { current ->
+    val playerSong = (pendingTapSong ?: player.song)?.let { current ->
         val extra = links?.takeIf { it.videoId == current.videoId } ?: return@let current
         current.copy(
             artistId = current.artistId ?: extra.artistId,
@@ -3386,6 +3430,12 @@ private fun BitChordApp(
                                 onFestiveLogoClick = { showDiwali = true },
                                 signedIn = signedIn,
                                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                                onConfigureProxy = {
+                                    context.startActivity(
+                                        Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
+                                    )
+                                },
+                                proxyLabel = stringResource(R.string.fourpril_home_proxy_button),
                                 onItemClick = { item, shelfTitle ->
                                     val song = shelfSong(item)
                                     // Hoisted because ShelfItem lives in :shared, and
@@ -4163,6 +4213,18 @@ private fun BitChordApp(
                     }
                 }
 
+                // The mini-player's downward gesture must stop *audio* and
+                // clear the queue; pause alone would leave the bar and
+                // notification ready to resume.
+                val stopAndDismissMiniPlayer: () -> Unit = {
+                    controller?.let { c ->
+                        c.pause()
+                        c.stop()
+                        c.clearMediaItems()
+                    }
+                    dismissPlayer()
+                }
+
                 if (glassActive) Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -4195,6 +4257,7 @@ private fun BitChordApp(
                         },
                         controlsLocked = controlsLocked,
                         onBlockedControl = showHostOnlyNotice,
+                        onStopAndDismiss = stopAndDismissMiniPlayer,
                         dock = activeDock,
                         pull = playerSheetMotion.takeIf { !reducePlayerMotion },
                         modifier = Modifier.fillMaxWidth(),
@@ -4232,6 +4295,7 @@ private fun BitChordApp(
                             },
                             controlsLocked = controlsLocked,
                             onBlockedControl = showHostOnlyNotice,
+                            onStopAndDismiss = stopAndDismissMiniPlayer,
                             dock = activeDock,
                             pull = playerSheetMotion.takeIf { !reducePlayerMotion },
                             modifier = Modifier.fillMaxWidth(),
@@ -4428,11 +4492,26 @@ private fun BitChordApp(
             // rating it comes back with is more authoritative than anything
             // the library feed knew — so the menu asks as it opens.
             LaunchedEffect(song.videoId) { viewModel.loadSongMenu(song.videoId) }
-            // "Remove from this playlist" is only a sentence on a playlist
-            // page the account can actually edit, and only for a row that
-            // carries the per-entry id a removal is expressed in.
-            val editable = viewModel.editablePlaylist(detail?.browseId)
-                ?.takeIf { !fromPlayer && song.setVideoId != null }
+            // In Now Playing, derive the target from the *playing queue's*
+            // originating playlist, not the page visible underneath. Require
+            // this occurrence's setVideoId to avoid deleting duplicates.
+            val playbackPlaylistId = song.playbackSourceId?.takeIf {
+                fromPlayer && song.playbackSourceType == PlaybackSourceType.BROWSE &&
+                    it.startsWith("VL") && song.setVideoId != null
+            }
+            val playlistOwnership by viewModel.playlistOwned.collectAsStateWithLifecycle()
+            LaunchedEffect(playbackPlaylistId, playlists) {
+                if (playbackPlaylistId != null) {
+                    viewModel.loadPlaylists()
+                    if (playlists.any { it.browseId == playbackPlaylistId }) {
+                        viewModel.resolvePlaylistOwnership(playbackPlaylistId)
+                    }
+                }
+            }
+            val editable = (if (fromPlayer) playbackPlaylistId else detail?.browseId)
+                ?.takeIf { song.setVideoId != null }
+                ?.let(viewModel::editablePlaylist)
+                ?.takeIf { !fromPlayer || playlistOwnership[it.browseId] == true }
             // Asked of the cache's index off the main thread as the menu opens,
             // so "Remove from cache" is only offered for a track it holds.
             // Re-asked when the cache changes, which is what drops the row
@@ -5314,11 +5393,34 @@ private fun BitChordApp(
                 initialName = remember {
                     ListenTogether.nickname().ifBlank { account?.name.orEmpty() }
                 },
+                proxyReady = remember {
+                    // These values are latched at Application.onCreate.
+                    // A .conf import alone doesn't make the old process safe
+                    // for login; only a newly started native tunnel does.
+                    val selected = com.music.bitchord.proxy.AppProxyStore.read(context)
+                    val active = com.music.bitchord.data.Http.configuredRoute
+                    when (selected.kind) {
+                        com.music.bitchord.data.AppProxyKind.WIREGUARD_LOCAL ->
+                            com.music.bitchord.proxy.WireGuardProfileStore.hasProfile(context) &&
+                                com.music.bitchord.proxy.AppWireGuard.isReady &&
+                                active.kind == com.music.bitchord.data.AppProxyKind.WIREGUARD_LOCAL
+                        com.music.bitchord.data.AppProxyKind.DIRECT ->
+                            active.kind == com.music.bitchord.data.AppProxyKind.DIRECT
+                        else -> active == selected
+                    }
+                },
                 onNameChosen = ListenTogether::setNickname,
                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                onPickWireGuardConf = firstRunConfImport.openConf,
+                confImportError = firstRunConfImport.error,
+                confImporting = firstRunConfImport.importing,
                 onFinish = AppSettings::setOnboardingComplete,
             )
         }
+
+        // Same forced, full-process restart flow as importing from Settings.
+        // This dialog belongs to the main Activity, not the onboarding page.
+        WireGuardImportRestartDialog(firstRunConfImport)
 
         // ---- Google sign-in (full screen WebView) ----
         webSession?.let { mode ->

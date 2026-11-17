@@ -288,6 +288,7 @@ fun SettingsScreen(
     val hideSongStatus by AppSettings.hideSongStatus.collectAsStateWithLifecycle()
     val showQueueHistory by AppSettings.showQueueHistory.collectAsStateWithLifecycle()
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
+    val openFullPlayerOnSongTap by AppSettings.openFullPlayerOnSongTap.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val preferMusicOnly by AppSettings.preferMusicOnly.collectAsStateWithLifecycle()
     val squareVideoThumbnails by AppSettings.squareVideoThumbnails.collectAsStateWithLifecycle()
@@ -514,6 +515,18 @@ fun SettingsScreen(
                         title = sourceTitle,
                         subtitle = sourceSubtitle,
                         onClick = onSources,
+                    )
+                }
+                row("App-local proxy", "proxy", "socks5", "http", "wireguard") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Wifi,
+                        title = "App-local proxy",
+                        subtitle = "HTTP / SOCKS5 (restart required)",
+                        onClick = {
+                            context.startActivity(
+                                Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
+                            )
+                        },
                     )
                 }
                 // One line on purpose: it qualifies the row above rather than
@@ -1548,6 +1561,21 @@ fun SettingsScreen(
         // No footer: it only restated the stop-on-close row's own subtitle,
         // which sits four rows above it and says the same thing in fewer words.
         if (shows(SettingsCategory.MISCELLANEOUS)) SearchableSettingsGroup(search, header = stringResource(R.string.miscellaneous)) {
+            val openFullPlayerTitle = stringResource(R.string.fourpril_open_full_player_on_tap)
+            row(openFullPlayerTitle, "player", "mini player", "full player", "now playing", "tap") {
+                SettingsRow(
+                    icon = Icons.Rounded.Fullscreen,
+                    title = openFullPlayerTitle,
+                    subtitle = stringResource(R.string.fourpril_open_full_player_on_tap_subtitle),
+                    trailing = {
+                        IosSwitch(
+                            checked = openFullPlayerOnSongTap,
+                            onCheckedChange = AppSettings::setOpenFullPlayerOnSongTap,
+                        )
+                    },
+                    onClick = { AppSettings.setOpenFullPlayerOnSongTap(!openFullPlayerOnSongTap) },
+                )
+            }
             val playNextOnSwipeTitle = stringResource(R.string.play_next_on_swipe)
             row(playNextOnSwipeTitle, "swipe", "queue") {
                 SettingsRow(

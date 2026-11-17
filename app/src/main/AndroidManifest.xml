@@ -103,6 +103,21 @@
                 android:value="true" />
         </service>
 
+        <activity
+            android:name=".proxy.AppProxySettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BitChord" />
+
+        <!-- A full process restart, not Activity.recreate(): the native
+             WireGuard/OkHttp/WebView route was frozen during Application.onCreate. -->
+        <activity
+            android:name=".proxy.AppProxyRelaunchActivity"
+            android:exported="false"
+            android:process=":proxy_relaunch"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.BitChord" />
+
         <!-- Android Auto support -->
         <meta-data
             android:name="com.google.android.gms.car.application"

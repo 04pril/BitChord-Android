@@ -850,6 +850,9 @@ fun PullToRefresh(
 @Composable
 fun SignInBanner(
     onSignIn: () -> Unit,
+    /** Only the signed-out Android home passes this: open app-local proxy before login. */
+    onConfigureProxy: (() -> Unit)? = null,
+    proxyLabel: String = "Proxy",
     modifier: Modifier = Modifier,
     /**
      * Whether the mesh may move. Off, it finishes the fade it is in and rests:
@@ -870,7 +873,18 @@ fun SignInBanner(
                 scaleY = scale
             }
             .clip(RoundedCornerShape(22.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onSignIn),
+            // Keep the old whole-card tap when there is only one action.
+            // With two actions, make each pill independently clickable so
+            // the Proxy pill cannot accidentally launch Google login.
+            .then(
+                if (onConfigureProxy == null) {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClick = onSignIn,
+                    )
+                } else Modifier
+            ),
     ) {
         // A card is a few hundred dp the reader is looking straight at, which
         // is the case the mesh lets keep moving — see its `continuous` note.
@@ -892,25 +906,61 @@ fun SignInBanner(
             )
             Spacer(Modifier.height(16.dp))
             Row(
-                Modifier
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .padding(start = 16.dp, end = 20.dp, top = 10.dp, bottom = 10.dp),
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Image(
-                    painter = painterResource(Res.drawable.ic_google_g),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(Res.string.sign_in_with_google),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.W700,
-                    color = Color.Black,
-                )
+                Row(
+                    Modifier
+                        .then(if (onConfigureProxy != null) Modifier.weight(1f) else Modifier)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .clickable(onClick = onSignIn)
+                        .padding(
+                            start = if (onConfigureProxy != null) 9.dp else 16.dp,
+                            end = if (onConfigureProxy != null) 9.dp else 20.dp,
+                            top = 10.dp,
+                            bottom = 10.dp,
+                        ),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Image(
+                        painter = painterResource(Res.drawable.ic_google_g),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(Res.string.sign_in_with_google),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = if (onConfigureProxy != null) 14.sp else 15.sp,
+                        fontWeight = FontWeight.W700,
+                        color = Color.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (onConfigureProxy != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.18f))
+                            .border(1.dp, Color.White.copy(alpha = 0.40f), CircleShape)
+                            .clickable(onClick = onConfigureProxy)
+                            .padding(horizontal = 14.dp, vertical = 11.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = proxyLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.W700,
+                            color = Color.White,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
     }
