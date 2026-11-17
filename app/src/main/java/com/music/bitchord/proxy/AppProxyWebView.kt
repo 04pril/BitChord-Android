@@ -20,7 +20,7 @@ object AppProxyWebView {
         // login screen with a possibly direct or unprotected WebView route.
         if (AppWireGuard.isBlocked) return false
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) return false
-        val scheme = if (route.kind == AppProxyKind.SOCKS5) "socks5" else "http"
+        val scheme = if (route.kind == AppProxyKind.SOCKS5) "socks" else "http"
         val host = if (":" in route.host) "[${route.host}]" else route.host
         // Do not permit the standard localhost / link-local bypass to
         // silently escape an explicitly selected app-local tunnel.
