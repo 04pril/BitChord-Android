@@ -6,8 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -144,6 +146,9 @@ private val TRACK_SWIPE_THRESHOLD = 72.dp
 /** Downward distance required to stop playback and dismiss the mini-player. */
 private val STOP_SWIPE_THRESHOLD = 72.dp
 
+/** Full finger-following shrink distance before the mini-player fades out. */
+private val STOP_DISMISS_TRAVEL = 224.dp
+
 /**
  * How much further a drag may go sideways than up and still be a pull. A
  * thumb swiping up from the bottom of the screen travels on an arc, and judged
@@ -235,6 +240,10 @@ internal fun Modifier.miniPlayerGestures(
     // recomposing it.
     val lift = remember { mutableFloatStateOf(0f) }
     val settle = remember { arrayOfNulls<Job>(1) }
+    // Animatable swipe-down layer shared by standard and Liquid Glass bars.
+    // Kept at draw time so dragging never recomposes the player or its artwork.
+    val dismiss = remember { mutableFloatStateOf(0f) }
+    val dismissSettle = remember { arrayOfNulls<Job>(1) }
     return pointerInput(Unit) {
         val trackThreshold = TRACK_SWIPE_THRESHOLD.toPx()
         val stopThreshold = STOP_SWIPE_THRESHOLD.toPx()
@@ -267,13 +276,43 @@ internal fun Modifier.miniPlayerGestures(
             val slopped = start ?: return@awaitEachGesture
 
             if (verticalDown) {
-                var dragged = slopped.position.y - down.position.y
+                dismissSettle[0]?.cancel()
+                var dragged = (slopped.position.y - down.position.y).coerceAtLeast(0f)
+                // Follow the thumb as soon as slop is crossed: slide down,
+                // shrink and fade are all one graphics layer, not 3 recompositions.
+                dismiss.floatValue = dragged
                 val finished = drag(pointer) { change ->
-                    dragged += change.positionChange().y
+                    dragged = (dragged + change.positionChange().y).coerceAtLeast(0f)
+                    dismiss.floatValue = dragged
                     change.consume()
                 }
-                if (finished && dragged >= stopThreshold) {
-                    if (currentLocked) currentOnBlocked() else currentOnStopAndDismiss()
+                val confirmed = finished && dragged >= stopThreshold
+                if (confirmed && !currentLocked) {
+                    val finishAt = maxOf(dragged + 48.dp.toPx(), STOP_DISMISS_TRAVEL.toPx())
+                    // Keep the audio playing for the short finish animation;
+                    // then stop+clear the queue so no bar flashes back.
+                    dismissSettle[0] = scope.launch {
+                        animate(
+                            initialValue = dismiss.floatValue,
+                            targetValue = finishAt,
+                            animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing),
+                        ) { value, _ -> dismiss.floatValue = value }
+                        currentOnStopAndDismiss()
+                    }
+                } else {
+                    if (confirmed && currentLocked) currentOnBlocked()
+                    // Below the threshold (or a cancelled gesture), the pill
+                    // springs back without pausing playback.
+                    dismissSettle[0] = scope.launch {
+                        animate(
+                            initialValue = dismiss.floatValue,
+                            targetValue = 0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                            ),
+                        ) { value, _ -> dismiss.floatValue = value }
+                    }
                 }
                 return@awaitEachGesture
             }
@@ -331,7 +370,15 @@ internal fun Modifier.miniPlayerGestures(
                 ) { value, _ -> lift.floatValue = value }
             }
         }
-    }.graphicsLayer { translationY = -lift.floatValue }
+    }.graphicsLayer {
+        val down = dismiss.floatValue
+        val progress = (down / STOP_DISMISS_TRAVEL.toPx()).coerceIn(0f, 1f)
+        val scale = 1f - 0.26f * progress
+        translationY = down - lift.floatValue
+        scaleX = scale
+        scaleY = scale
+        alpha = 1f - progress * progress
+    }
 }
 
 /**

@@ -51,3 +51,9 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - Existing early-test installations with a saved .conf and previous implicit/explicit DIRECT mode are migrated ONCE to Built-in WireGuard. Saved HTTP/SOCKS5 choices remain untouched. After migration, a user's explicit Off selection is respected across restarts.
 - Successful `.conf` import automatically saves the WireGuard mode and updates the selected radio. A full process restart is still required to activate it.
 - The settings activity uses a dark/light Compose Material3 color scheme plus a Surface so labels remain visible with the system's dark theme.
+
+
+## Player UI responsiveness (2026-11-17)
+- Original audio/resolver/queue logic is unchanged. For a song tap with the full-player preference enabled, the host opens the sheet **synchronously**, presenting a temporary metadata-only tap preview while the existing Media3 queue is built. A matching live player item replaces the preview; a 4s fail-safe clears stale previews.
+- Downward mini-player gestures now track the finger at draw time, translating down and shrinking smoothly (up to 26%) with a subtle fade. If released before the original 72dp stop threshold, the pill springs back. If released past the threshold, it finishes a 190ms ease-out and only then calls pause+stop+clearMediaItems. Works through the shared detector on normal and Liquid Glass mini-players; locked Listen Together controls rebound rather than stopping.
+- Playlist deletion was confirmed functional by the tester and is intentionally untouched in this revision.

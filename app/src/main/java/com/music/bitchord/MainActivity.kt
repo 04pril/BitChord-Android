@@ -1189,6 +1189,22 @@ private fun BitChordApp(
     var convertedVideoId by remember { mutableStateOf<String?>(null) }
     // Optimistically updated track for instant UI updates when switching versions
     var optimisticVersionSong by remember { mutableStateOf<Song?>(null) }
+    // UI-only preview on direct song taps. The player sheet starts opening
+    // immediately, while the unmodified queue construction runs as before.
+    // Never sent into Media3 or a stream resolver.
+    var pendingTapSong by remember { mutableStateOf<Song?>(null) }
+    LaunchedEffect(player.song?.videoId, pendingTapSong?.videoId) {
+        if (pendingTapSong != null && player.song?.videoId == pendingTapSong?.videoId) {
+            pendingTapSong = null
+        }
+    }
+    LaunchedEffect(pendingTapSong?.videoId) {
+        val requestedId = pendingTapSong?.videoId ?: return@LaunchedEffect
+        // A refused or failed session command must not leave a fake
+        // Now Playing track on screen forever.
+        delay(4_000)
+        if (pendingTapSong?.videoId == requestedId) pendingTapSong = null
+    }
 
     // Lyrics follow whatever is playing; duration lands a beat after the track.
     // Keyed on the lyric settings too, so turning a source on or off, reordering
@@ -1537,9 +1553,21 @@ private fun BitChordApp(
         // never will); those can't be queued, so play the rest in their order.
         if (allSongs.getOrNull(allIndex)?.isUnresolvedSpotify == true) return
         val songs = allSongs.filterNot { it.isUnresolvedSpotify }
+        if (songs.isEmpty()) return
         val index = songs.indexOf(allSongs.getOrNull(allIndex)).coerceAtLeast(0)
+        if (refusedByHost() || controller == null) return
         playRequestGeneration++
         activeRadioSeed = null
+        // The old implementation opened *after* building the queue and
+        // dispatching Media3. Opening synchronously on tap removes that beat.
+        if (openFullPlayerOnSongTap) {
+            pendingTapSong = songs[index].copy(
+                playbackSource = source.title,
+                playbackSourceType = source.type,
+                playbackSourceId = source.id,
+            )
+            if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
+        }
         scope.launch {
             if (refusedByHost()) return@launch
             val c = controller ?: return@launch
@@ -1586,10 +1614,8 @@ private fun BitChordApp(
                     c.playSongs(result.timeline, result.startIndex)
                 }
             }
-            if (openFullPlayerOnSongTap) {
-                if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
-            }
-            // Off preserves the original mini-player-first behavior.
+            // The full player was already opened synchronously on the tap.
+            // OFF preserves the original mini-player-first behavior.
         }
     }
     // Kept for entry points whose rows already carry their origin (notably a
@@ -1633,6 +1659,14 @@ private fun BitChordApp(
      * where the surrounding list *is* the thing the user asked for.
      */
     val playRadio: (Song, QueueSource) -> Unit = { song, source ->
+        if (!ListenTogether.state.value.controlsLocked && controller != null && openFullPlayerOnSongTap) {
+            pendingTapSong = song.copy(
+                playbackSource = source.title,
+                playbackSourceType = source.type,
+                playbackSourceId = source.id,
+            )
+            if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
+        }
         playRequestGeneration++
         activeRadioSeed = null
         scope.launch {
@@ -1648,10 +1682,8 @@ private fun BitChordApp(
                 source = source,
             )
             c.playSongs(oneOffQueue, 0)
-            if (openFullPlayerOnSongTap) {
-                if (reducePlayerMotion) showNowPlaying = true else playerSheetMotion.open()
-            }
-            // Off preserves the original mini-player-first behavior.
+            // The full player was already opened synchronously on the tap.
+            // OFF preserves the original mini-player-first behavior.
         }
     }
 
@@ -2495,7 +2527,7 @@ private fun BitChordApp(
         links = YtMusicRepository.trackLinks(current.videoId).getOrNull()
         linksLoading = false
     }
-    val playerSong = player.song?.let { current ->
+    val playerSong = (pendingTapSong ?: player.song)?.let { current ->
         val extra = links?.takeIf { it.videoId == current.videoId } ?: return@let current
         current.copy(
             artistId = current.artistId ?: extra.artistId,
