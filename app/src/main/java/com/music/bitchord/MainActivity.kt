@@ -5388,6 +5388,22 @@ private fun BitChordApp(
                 initialName = remember {
                     ListenTogether.nickname().ifBlank { account?.name.orEmpty() }
                 },
+                proxyReady = remember {
+                    // These values are latched at Application.onCreate.
+                    // A .conf import alone doesn't make the old process safe
+                    // for login; only a newly started native tunnel does.
+                    val selected = com.music.bitchord.proxy.AppProxyStore.read(context)
+                    val active = com.music.bitchord.data.Http.configuredRoute
+                    when (selected.kind) {
+                        com.music.bitchord.data.AppProxyKind.WIREGUARD_LOCAL ->
+                            com.music.bitchord.proxy.WireGuardProfileStore.hasProfile(context) &&
+                                com.music.bitchord.proxy.AppWireGuard.isReady &&
+                                active.kind == com.music.bitchord.data.AppProxyKind.WIREGUARD_LOCAL
+                        com.music.bitchord.data.AppProxyKind.DIRECT ->
+                            active.kind == com.music.bitchord.data.AppProxyKind.DIRECT
+                        else -> active == selected
+                    }
+                },
                 onNameChosen = ListenTogether::setNickname,
                 onSignIn = { webSession = WebSessionMode.SIGN_IN },
                 onConfigureProxy = {

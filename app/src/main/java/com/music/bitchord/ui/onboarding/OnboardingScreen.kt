@@ -82,7 +82,8 @@ import com.music.bitchord.ui.player.WelcomeMeshPalettes
 import com.music.bitchord.ui.player.cyclingMeshPalette
 
 /**
- * The two welcome pages: a name for Listen Together, then the YouTube sign-in.
+ * Three welcome steps: configure app-local WireGuard/proxy first,
+ * choose a Listen Together name, then optionally sign in to Google.
  *
  * Shown once — to new installs and, because the flag it sets is new, to anyone
  * updating from a build without it. The second page is skipped for an account
@@ -96,7 +97,14 @@ import com.music.bitchord.ui.player.cyclingMeshPalette
 fun OnboardingScreen(
     signedIn: Boolean,
     initialName: String,
-    /** Saves the party name. Called on Next, before the second page. */
+    /**
+     * True only if the selected proxy route was applied at PROCESS startup.
+     * For WireGuard this requires a saved profile and a running native listener.
+     * After .conf import the separate relaunch process opens a new MainActivity
+     * and this begins at the name step instead of looping through setup again.
+     */
+    proxyReady: Boolean,
+    /** Saves the party name, called after the proxy-first setup. */
     onNameChosen: (String) -> Unit,
     /** Opens the Google sign-in. The caller finishes onboarding once it lands. */
     onSignIn: () -> Unit,
@@ -105,11 +113,15 @@ fun OnboardingScreen(
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var page by rememberSaveable { mutableIntStateOf(PAGE_NAME) }
+    var page by rememberSaveable {
+        mutableIntStateOf(if (proxyReady) PAGE_NAME else PAGE_PROXY)
+    }
     var name by rememberSaveable { mutableStateOf(initialName) }
     val focusManager = LocalFocusManager.current
 
-    BackHandler(enabled = page == PAGE_CONNECT) { page = PAGE_NAME }
+    BackHandler(enabled = page != PAGE_PROXY) {
+        page = if (page == PAGE_CONNECT) PAGE_NAME else PAGE_PROXY
+    }
     // "Sign in with Google" goes through the app's own sign-in WebView, raised
     // over this page; the account landing is what ends the welcome.
     LaunchedEffect(signedIn, page) {
@@ -118,7 +130,7 @@ fun OnboardingScreen(
 
     // The mesh never settles on one palette: each crossfade is as long as the
     // hold, so one runs straight into the next.
-    val palette = cyclingMeshPalette(if (page == PAGE_NAME) WelcomeMeshPalettes else ConnectPalettes)
+    val palette = cyclingMeshPalette(if (page == PAGE_CONNECT) ConnectPalettes else WelcomeMeshPalettes)
 
     Box(
         modifier
@@ -168,6 +180,11 @@ fun OnboardingScreen(
         ) { shown ->
             OnboardingPage {
                 when (shown) {
+                    PAGE_PROXY -> ProxyPage(
+                        onConfigureProxy = onConfigureProxy,
+                        onNext = { if (proxyReady) page = PAGE_NAME },
+                        proxyReady = proxyReady,
+                    )
                     PAGE_NAME -> NamePage(
                         name = name,
                         onNameChange = { name = it.take(NAME_LIMIT) },
@@ -181,7 +198,6 @@ fun OnboardingScreen(
                     )
                     else -> ConnectPage(
                         onBack = { page = PAGE_NAME },
-                        onConfigureProxy = onConfigureProxy,
                         onSignIn = onSignIn,
                         onSkip = onFinish,
                     )
@@ -203,6 +219,63 @@ private fun OnboardingPage(content: @Composable ColumnScope.() -> Unit) {
             content = content,
         )
     }
+}
+
+/**
+ * First-run entry point. It intentionally has one primary action and no
+ * Google-login or name controls; the app's network route must be configured
+ * before either the first account request or a streaming API request.
+ *
+ * Importing a .conf shows the mandatory "알겠습니다" process-restart dialog.
+ * After relaunch, proxyReady is true and the welcome resumes at NamePage.
+ */
+@Composable
+private fun ColumnScope.ProxyPage(
+    onConfigureProxy: () -> Unit,
+    onNext: () -> Unit,
+    proxyReady: Boolean,
+) {
+    Spacer(Modifier.height(56.dp))
+    Image(
+        painter = painterResource(Res.drawable.ic_logo),
+        contentDescription = null,
+        modifier = Modifier.size(width = 46.dp, height = 30.dp),
+    )
+    Spacer(Modifier.height(24.dp))
+    Title(stringResource(R.string.fourpril_onboarding_proxy_title))
+    Spacer(Modifier.height(14.dp))
+    Text(
+        text = stringResource(R.string.fourpril_onboarding_proxy_intro),
+        style = MaterialTheme.typography.bodyLarge,
+        fontSize = 17.sp,
+        lineHeight = 23.sp,
+        color = Color.White.copy(alpha = 0.78f),
+    )
+    Spacer(Modifier.weight(1f))
+    PillButton(
+        label = stringResource(R.string.fourpril_onboarding_proxy_setup),
+        onClick = onConfigureProxy,
+        primary = true,
+    )
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = stringResource(R.string.fourpril_onboarding_proxy_restart_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = Color.White.copy(alpha = 0.72f),
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+    )
+    if (proxyReady) {
+        // The user returned here from Name via Back after setup succeeded.
+        // No new import is needed; let them resume account setup.
+        Spacer(Modifier.height(16.dp))
+        PillButton(
+            label = stringResource(R.string.onboarding_next),
+            onClick = onNext,
+            primary = false,
+        )
+    }
+    Spacer(Modifier.height(16.dp))
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -263,7 +336,6 @@ private fun ColumnScope.NamePage(
 @Composable
 private fun ColumnScope.ConnectPage(
     onBack: () -> Unit,
-    onConfigureProxy: () -> Unit,
     onSignIn: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -282,23 +354,8 @@ private fun ColumnScope.ConnectPage(
 
     Spacer(Modifier.weight(1f))
 
-    // The first-run login browser has its own network stack. Offer proxy
-    // configuration before Google sign-in instead of only burying it in
-    // Settings, where a new user cannot get to it from this full-screen sheet.
-    PillButton(
-        label = stringResource(R.string.fourpril_onboarding_proxy_setup),
-        onClick = onConfigureProxy,
-        primary = false,
-    )
-    Spacer(Modifier.height(8.dp))
-    Text(
-        text = stringResource(R.string.fourpril_onboarding_proxy_restart_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = Color.White.copy(alpha = 0.82f),
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-    )
-    Spacer(Modifier.height(14.dp))
+    // WireGuard/proxy setup now happens FIRST, before NamePage.
+    // Do not duplicate a proxy action beside Google sign-in here.
     PillButton(
         label = stringResource(R.string.onboarding_sign_in_google),
         onClick = onSignIn,
@@ -454,8 +511,9 @@ private fun BackButton(onClick: () -> Unit) {
     }
 }
 
-private const val PAGE_NAME = 0
-private const val PAGE_CONNECT = 1
+private const val PAGE_PROXY = 0
+private const val PAGE_NAME = 1
+private const val PAGE_CONNECT = 2
 
 /** Long enough for a full name; the party server keeps the first 80. */
 private const val NAME_LIMIT = 40

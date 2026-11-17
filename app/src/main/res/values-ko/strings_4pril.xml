@@ -1,8 +1,10 @@
 <resources>
     <string name="fourpril_open_full_player_on_tap">노래 선택 시 전체 플레이어 열기</string>
     <string name="fourpril_open_full_player_on_tap_subtitle">끄면 미니플레이어에서 시작, 켜면 전체 플레이어를 바로 엽니다.</string>
+    <string name="fourpril_onboarding_proxy_title">프록시부터 설정해요</string>
+    <string name="fourpril_onboarding_proxy_intro">Google 로그인과 음악 재생에 사용할 연결을 먼저 준비해 주세요. WireGuard .conf를 가져오면 앱이 재시작되고 이름 설정부터 이어집니다.</string>
     <string name="fourpril_onboarding_proxy_setup">WireGuard / 프록시 먼저 설정</string>
-    <string name="fourpril_onboarding_proxy_restart_hint">.conf를 가져오면 ‘알겠습니다’를 누른 뒤 앱이 자동으로 재시작됩니다.</string>
+    <string name="fourpril_onboarding_proxy_restart_hint">.conf를 가져온 뒤 ‘알겠습니다’를 누르면 앱이 재시작되고 이름 설정으로 넘어갑니다.</string>
     <string name="fourpril_home_proxy_button">프록시</string>
     <string name="fourpril_proxy_restart_title">WireGuard 설정 완료</string>
     <string name="fourpril_proxy_restart_message">프록시 적용을 위해 앱을 재시작합니다.</string>

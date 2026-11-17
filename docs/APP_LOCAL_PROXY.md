@@ -79,3 +79,12 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - Confirmation opens a one-shot, nonexported `:proxy_relaunch` Activity in a distinct process, which terminates the old main process and launches the app's MainActivity as a new process. This guarantees AppWireGuard.startAtProcessLaunch can load the newly stored profile, rather than only recreating the Activity with the old frozen Http/WebView transport.
 - BitChordApplication skips normal startup work in the short-lived relaunch helper process. This is not an Android system VPN and no WireGuard handshake/Google-login egress verification is implied.
 - Other changes made by tapping Save without importing a profile continue to require a full process restart.
+
+
+## Proxy-first welcome screen (2026-11-17)
+- First install onboarding sequence: **Proxy setup -> Listen Together name -> Google sign-in**, not the original name-first order.
+- A dedicated first screen shows one prominent "WireGuard / 프록시 먼저 설정" button, the network privacy explanation, and restart instructions; it opens the same built-in profile importer.
+- On successful .conf import the non-dismissible "알겠습니다" dialog launches a separate relaunch process; the new main process starts WireGuard before onboarding is composed. If selected profile exists and native local listener started, onboarding **starts directly at the name step**, so the user does not need to import twice.
+- If WireGuard is absent/unready, the first screen remains available to correct the profile; it does not mistakenly show Google sign-in over an old DIRECT connection. A user explicitly selecting Direct or HTTP/SOCKS5 must ensure a full process restart before advancing, so the applied route matches the choice.
+- The previously added proxy button alongside Google sign-in on the welcome ConnectPage is removed because the separate first step now covers setup. The signed-out Home banner's proxy shortcut remains unchanged.
+- The login WebView retains its route-readiness and fail-closed checks. A running local listener alone does **not** prove successful remote WireGuard handshake or that Google login egress is tunneled; this still needs actual device tests.
