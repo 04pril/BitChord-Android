@@ -378,7 +378,7 @@ fun MiniPlayer(
     onPrevious: () -> Unit,
     onExpand: () -> Unit,
     /** Downward swipe stops playback and clears the queue, not merely the view. */
-    onStopAndDismiss: () -> Unit,
+    onStopAndDismiss: () -> Unit = {}, // Preview-safe; production always supplies stop-and-clear handler.
     /** @see com.music.bitchord.data.listentogether.ListenTogether.State.controlsLocked */
     controlsLocked: Boolean = false,
     onBlockedControl: () -> Unit = {},

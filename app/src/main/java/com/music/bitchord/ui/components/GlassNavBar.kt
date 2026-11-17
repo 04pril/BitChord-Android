@@ -101,7 +101,7 @@ fun GlassNavBar(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onExpand: () -> Unit,
-    onStopAndDismiss: () -> Unit,
+    onStopAndDismiss: () -> Unit = {}, // Preview-safe; host supplies the real stop handler.
     /** @see com.music.bitchord.data.listentogether.ListenTogether.State.controlsLocked */
     controlsLocked: Boolean = false,
     onBlockedControl: () -> Unit = {},
