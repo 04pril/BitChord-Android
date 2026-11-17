@@ -24,6 +24,39 @@ jobs:
       # GitHub ubuntu-latest already provides ANDROID_HOME; use BitChord's upstream
       # setup pattern. setup-android@v3 currently fails on sdkmanager 'tools'.
       - uses: gradle/actions/setup-gradle@v4
+      # Native source is public and pinned. This compiles the userspace tunnel
+      # into the SAME APK; no Morphe patcher, prebuilt VPN app or VpnService.
+      - name: Checkout pinned WireGuard userspace source
+        uses: actions/checkout@v4
+        with:
+          repository: seo-rii/morphe-patches
+          ref: d03b7439f517eeed13d12edc1f922ee0e640cd13
+          path: wireguard-source
+          sparse-checkout: |
+            native/wireguard
+            scripts/build-wireguard-android.sh
+            LICENSE
+            NOTICE
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Install native Android NDK r28c
+        run: |
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358"
+      - name: Build embedded WireGuard (arm64-v8a and x86_64)
+        run: |
+          test "$(git -C wireguard-source rev-parse HEAD)" = d03b7439f517eeed13d12edc1f922ee0e640cd13
+          bash wireguard-source/scripts/build-wireguard-android.sh arm64-v8a x86_64
+          for abi in arm64-v8a x86_64; do
+            mkdir -p "app/src/main/jniLibs/$abi"
+            cp "wireguard-source/native/wireguard/build/android/$abi/libmorphewireguard.so" "app/src/main/jniLibs/$abi/"
+            test -s "app/src/main/jniLibs/$abi/libmorphewireguard.so"
+          done
+          mkdir -p app/src/main/assets/wireguard/licenses
+          cp wireguard-source/LICENSE wireguard-source/NOTICE app/src/main/assets/wireguard/licenses/
+          cp -a wireguard-source/native/wireguard/licenses/. app/src/main/assets/wireguard/licenses/
       - name: Assemble standalone installable dev APK
         run: bash ./gradlew --no-daemon :app:assembleDevDebug
       - name: Run unit tests (report locale completeness failures separately)
@@ -34,7 +67,12 @@ jobs:
           mkdir -p distribution
           for apk in app/build/outputs/apk/dev/debug/*.apk; do
             test -f "$apk" || continue
-            cp "$apk" "distribution/BitChord-4pril-TEST-${GITHUB_RUN_NUMBER}-$(basename "$apk")"
+            case "$(basename "$apk")" in *armeabi-v7a*) continue ;; esac
+            if ! unzip -Z1 "$apk" | grep -Eq 'lib/(arm64-v8a|x86_64)/libmorphewireguard[.]so'; then
+              echo "WireGuard native library missing from $apk" >&2
+              exit 1
+            fi
+            cp "$apk" "distribution/BitChord-4pril-WG-TEST-${GITHUB_RUN_NUMBER}-$(basename "$apk")"
           done
           ls distribution/*.apk
           sha256sum distribution/*.apk > distribution/SHA256SUMS.txt
@@ -55,10 +93,10 @@ jobs:
           gh release create "$tag" distribution/* --target "$GITHUB_SHA" \
             --title "4pril BitChord Android TEST #${GITHUB_RUN_NUMBER}" \
             --prerelease \
-            --notes "Direct-install Android development APK. Original BitChord playback engine unchanged. Adds HTTP/SOCKS5 proxy foundation, playlist-origin removal, player-opening option and mini-player swipe-down stop. Embedded WireGuard is NOT implemented in this build. Device tests are still required; upstream localization tests may fail."
+            --notes "Development APK with userspace WireGuard native engine inside the APK (arm64-v8a / x86_64). User imports WireGuard .conf in settings. Existing audio engine unchanged. Google login WebView proxy authentication requires real-device verification. Not a system-wide VPN, no Morphe patcher."
       - name: Publish prerelease on tag
         if: startsWith(github.ref, 'refs/tags/4pril-android-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" distribution/* --title "4pril Android TEST $GITHUB_REF_NAME" --prerelease --notes "Installable development build: HTTP/SOCKS5 routing only. Embedded WireGuard is not integrated yet."
+          gh release create "$GITHUB_REF_NAME" distribution/* --title "4pril Android TEST $GITHUB_REF_NAME" --prerelease --notes "Direct-install development APK including native userspace WireGuard. Google sign-in WebView requires real-device verification."

@@ -59,9 +59,9 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
     override fun onCreate() {
         super.onCreate()
         // Configure before InnerTube, media playback, downloads and artwork create clients.
-        com.music.bitchord.data.Http.configureAtStartup(
-            com.music.bitchord.proxy.AppProxyStore.read(this),
-        )
+        val selectedRoute = com.music.bitchord.proxy.AppProxyStore.read(this)
+        val tunnel = com.music.bitchord.proxy.AppWireGuard.startAtProcessLaunch(this, selectedRoute)
+        com.music.bitchord.data.Http.configureAtStartup(tunnel.route, tunnel.proxyAuthorization)
         // The player is drawn by the shared UI module; this is what it reads
         // underneath — settings, the Canvas decoder, outputs, the party.
         AndroidStreamHooks.installEarly()

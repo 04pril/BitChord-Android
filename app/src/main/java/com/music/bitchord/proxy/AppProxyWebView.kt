@@ -18,7 +18,12 @@ object AppProxyWebView {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) return false
         val scheme = if (route.kind == AppProxyKind.SOCKS5) "socks" else "http"
         val host = if (":" in route.host) "[${route.host}]" else route.host
-        val config = ProxyConfig.Builder().addProxyRule("$scheme://$host:${route.port}").build()
+        // Do not permit the standard localhost / link-local bypass to
+        // silently escape an explicitly selected app-local tunnel.
+        val config = ProxyConfig.Builder()
+            .addProxyRule("$scheme://$host:${route.port}")
+            .removeImplicitRules()
+            .build()
         return suspendCancellableCoroutine { continuation ->
             try {
                 ProxyController.getInstance().setProxyOverride(
