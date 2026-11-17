@@ -2,7 +2,7 @@
 
 Status: experimental / build and real-device validation pending. The project is based on BitChord v1.9.1 and ships a direct-install debug APK through Actions.
 
-- Proxy options: Direct (default), HTTP, SOCKS5.
+- Proxy options: Built-in WireGuard (default), Direct (explicit opt-out), HTTP, SOCKS5. On a clean install, missing .conf fails closed; import a .conf then restart to enable requests.
 - Users can configure proxy host/port under Settings > Audio quality > App-local proxy. Restart is required for changes.
 - The shared OkHttp client is used by the upstream API playback resolver, Media3 audio source and downloader. The Coil image fetcher is created from the same configured client.
 - Google sign-in WebView has a separate proxy override, applied before loading a login page. If the override is unsupported, login is blocked instead of silently bypassing the proxy.
@@ -17,8 +17,8 @@ Status: experimental / build and real-device validation pending. The project is 
 - Listen Together control lock guards the downward stop gesture.
 - Upstream's LocaleStringsTest currently fails on incomplete localization catalogs; CI reports unit-test failures separately from APK assembly.
 
-### Unimplemented
-**WireGuard is NOT built in yet.** This branch does not provide the Go userspace engine, JNI bridge, native libraries, encrypted .conf storage, random proxy credentials, or a WireGuard switch. HTTPS proxy authentication is also not implemented. This prototype is not a complete VPN or kill switch. Uncovered WebView requests, third-party networking, SMB, and Cast require device validation.
+### Runtime verification limits
+The userspace WireGuard JNI library and encrypted .conf import are integrated into the build. This remains an experimental app-local proxy rather than a system VPN or full kill switch. Google-login WebView 407 authentication, provider-specific WebView support, DNS/egress IP, and uncovered third-party networking clients all require on-device validation.
 
 ### Reference for Phase 2
 - https://github.com/04pril/morphe-wireguard-patches
@@ -44,3 +44,10 @@ The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNE
 - WebViewClient answers HTTP-auth challenges **only** when host=127.0.0.1 and realm=App WireGuard. On a 407 or proxy connection error, it blocks login rather than bypassing. **Not all WebView providers expose proxy 407 challenges to this callback; real-device Android WebView compatibility is unverified.** A successful Google login alone does not prove tunneled IP — independently verify DNS and egress IP on-device.
 - Native build uses Go 1.26.10 and NDK 28.2.13676358; no binary artifact is claimed until GitHub Actions compiles and packages the .so.
 - Protected network paths still need on-device validation (including Google sign-in, cookies/redirects, playback, and download). No system-wide kill switch is claimed.
+
+
+## Default WireGuard radio and dark theme (2026-11-17)
+- On a fresh install, the second radio **Built-in WireGuard** is the default, not Direct. No .conf means blocked app networking until import; this is deliberate fail-closed behavior.
+- Existing early-test installations with a saved .conf and previous implicit/explicit DIRECT mode are migrated ONCE to Built-in WireGuard. Saved HTTP/SOCKS5 choices remain untouched. After migration, a user's explicit Off selection is respected across restarts.
+- Successful `.conf` import automatically saves the WireGuard mode and updates the selected radio. A full process restart is still required to activate it.
+- The settings activity uses a dark/light Compose Material3 color scheme plus a Surface so labels remain visible with the system's dark theme.

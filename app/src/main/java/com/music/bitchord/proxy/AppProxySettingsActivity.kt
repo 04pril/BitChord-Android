@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,8 +28,9 @@ import kotlinx.coroutines.withContext
 class AppProxySettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val initial = AppProxyStore.read(this)
+        val savedSelection = AppProxyStore.read(this)
         setContent {
+            var initial by remember { mutableStateOf(savedSelection) }
             var profileInstalled by remember {
                 mutableStateOf(WireGuardProfileStore.hasProfile(this@AppProxySettingsActivity))
             }
@@ -52,8 +54,16 @@ class AppProxySettingsActivity : ComponentActivity() {
                                     )
                                 }
                             }
+                            // Importing a profile is an explicit intent to
+                            // use the embedded tunnel. Make the second radio
+                            // selected and persist it for the next process.
+                            val wireGuardRoute = AppProxyRoute(
+                                AppProxyKind.WIREGUARD_LOCAL, "127.0.0.1", 9,
+                            )
+                            AppProxyStore.save(this@AppProxySettingsActivity, wireGuardRoute)
+                            initial = wireGuardRoute
                             profileInstalled = true
-                            notice = "WireGuard profile imported and encrypted. Restart to apply."
+                            notice = "WireGuard selected. Fully restart BitChord to apply."
                         } catch (_: Exception) {
                             // Do not display parser exceptions or raw profile text.
                             notice = "Import failed. Check .conf format, keys, and secure storage."
@@ -64,17 +74,28 @@ class AppProxySettingsActivity : ComponentActivity() {
                 }
             }
 
-            MaterialTheme {
-                AppProxyEditor(
-                    initial = initial,
-                    profileInstalled = profileInstalled,
-                    message = notice,
-                    onImportProfile = { profileImporter.launch(arrayOf("*/*")) },
-                    save = { route ->
-                        AppProxyStore.save(this@AppProxySettingsActivity, route)
-                        finish()
-                    },
-                )
+            MaterialTheme(
+                colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    // Recreate the editor if a newly imported .conf changes the
+                    // selected mode; do not show a stale DIRECT radio.
+                    key(initial.kind, initial.host, initial.port) {
+                        AppProxyEditor(
+                            initial = initial,
+                            profileInstalled = profileInstalled,
+                            message = notice,
+                            onImportProfile = { profileImporter.launch(arrayOf("*/*")) },
+                            save = { route ->
+                                AppProxyStore.save(this@AppProxySettingsActivity, route)
+                                finish()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -98,6 +119,11 @@ private fun AppProxyEditor(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("App-local proxy", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Default: Built-in WireGuard. If no .conf is imported yet, " +
+                "protected requests are blocked until a valid profile is set.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text("Uses only BitChord's own networking. No Android VPN permission or separate patcher.")
         Text("Current process: " + when {
             AppWireGuard.isReady -> "WireGuard local proxy ready (handshake not verified)"
