@@ -103,6 +103,11 @@
                 android:value="true" />
         </service>
 
+        <activity
+            android:name=".proxy.AppProxySettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BitChord" />
+
         <!-- Android Auto support -->
         <meta-data
             android:name="com.google.android.gms.car.application"

@@ -516,6 +516,18 @@ fun SettingsScreen(
                         onClick = onSources,
                     )
                 }
+                row("App-local proxy", "proxy", "socks5", "http", "wireguard") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Wifi,
+                        title = "App-local proxy",
+                        subtitle = "HTTP / SOCKS5 (restart required)",
+                        onClick = {
+                            context.startActivity(
+                                Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
+                            )
+                        },
+                    )
+                }
                 // One line on purpose: it qualifies the row above rather than
                 // being a setting of its own, so it reads as part of Sources.
                 val directSourceTitle = stringResource(R.string.direct_source_stream)

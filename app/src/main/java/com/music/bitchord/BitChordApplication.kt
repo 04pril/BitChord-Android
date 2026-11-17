@@ -58,6 +58,10 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
     @kotlin.OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate() {
         super.onCreate()
+        // Configure before InnerTube, media playback, downloads and artwork create clients.
+        com.music.bitchord.data.Http.configureAtStartup(
+            com.music.bitchord.proxy.AppProxyStore.read(this),
+        )
         // The player is drawn by the shared UI module; this is what it reads
         // underneath — settings, the Canvas decoder, outputs, the party.
         AndroidStreamHooks.installEarly()
@@ -212,7 +216,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
      * identifying agent. Anything else falls through to Coil's own fetchers.
      */
     private val coilHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        // Coil has an independent OkHttp transport; use the same proxy route.
+        com.music.bitchord.data.Http.client.newBuilder()
             .addInterceptor { chain ->
                 chain.proceed(
                     chain.request().newBuilder()

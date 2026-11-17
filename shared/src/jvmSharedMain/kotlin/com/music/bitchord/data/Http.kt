@@ -130,7 +130,26 @@ object Http {
         chain.proceed(request)
     }
 
-    val client: OkHttpClient = OkHttpClient.Builder()
+    /** Frozen at process startup: API, Media3 playback and downloads share the route. */
+    @Volatile private var startupRoute: AppProxyRoute = AppProxyRoute.DIRECT
+    @Volatile private var preparedClient: OkHttpClient? = null
+
+    val configuredRoute: AppProxyRoute
+        get() = startupRoute
+
+    @Synchronized
+    fun configureAtStartup(route: AppProxyRoute) {
+        check(preparedClient == null) { "Proxy changes require restarting BitChord" }
+        startupRoute = route.validated()
+    }
+
+    val client: OkHttpClient
+        get() = preparedClient ?: synchronized(this) {
+            preparedClient ?: newClient().also { preparedClient = it }
+        }
+
+    private fun newClient(): OkHttpClient = OkHttpClient.Builder()
+        .apply { if (startupRoute.kind != AppProxyKind.DIRECT) proxy(startupRoute.javaProxy()) }
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)

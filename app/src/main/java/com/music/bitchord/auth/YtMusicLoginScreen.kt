@@ -7,6 +7,9 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +88,16 @@ fun YtMusicLoginScreen(
         else captureFrom(view, currentOnCaptured, currentOnUnavailable)
     }
 
+    // Android WebView has a separate transport; never load Google login through
+    // a direct connection if the configured app-local proxy could not be applied.
+    val context = LocalContext.current
+    val webProxyReady by produceState(initialValue = false) {
+        value = com.music.bitchord.proxy.AppProxyWebView.prepare(context)
+    }
+    if (!webProxyReady) {
+        Text("WebView proxy unavailable. Check the proxy and restart BitChord.")
+        return
+    }
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
