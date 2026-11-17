@@ -44,6 +44,18 @@ jobs:
           path: distribution/*
           if-no-files-found: error
           retention-days: 30
+      # Each successful feature-branch build creates a clearly labeled pre-release
+      # with installable APK assets, so testers need no Morphe patcher or Actions ZIP.
+      - name: Publish installable Android test APK to Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/app-local-proxy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="4pril-android-test-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" distribution/* --target "$GITHUB_SHA" \
+            --title "4pril BitChord Android TEST #${GITHUB_RUN_NUMBER}" \
+            --prerelease \
+            --notes "Direct-install Android development APK. Original BitChord playback engine unchanged. Adds HTTP/SOCKS5 proxy foundation, playlist-origin removal, player-opening option and mini-player swipe-down stop. Embedded WireGuard is NOT implemented in this build. Device tests are still required; upstream localization tests may fail."
       - name: Publish prerelease on tag
         if: startsWith(github.ref, 'refs/tags/4pril-android-v')
         env:
