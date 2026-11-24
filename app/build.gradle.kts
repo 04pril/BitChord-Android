@@ -73,6 +73,14 @@ android {
     // InnerTubeX's AAR requires compiling against 37; targetSdk (runtime behaviour) stays 36.
     compileSdk = 37
 
+    // Automix's models stay in src/main/assets (the desktop build and the
+    // release that hosts them read them from there) but are not packaged: the
+    // app downloads them on first use, see AutomixModels. The rest is AGP's
+    // default pattern, which setting this replaces.
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.onnx"
+    }
+
     defaultConfig {
         applicationId = "com.music.bitchord"
         // 26 keeps reach wide; real-time blur (RenderEffect) kicks in on API 31+,
@@ -101,6 +109,8 @@ android {
         // the same GitHub release, told apart by file name. See
         // AppUpdateChecker.apkAssetUrl.
         buildConfigField("String", "UPDATE_APK_PREFIX", "\"BitChord-\"")
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"kushagrasinghx/BitChord\"")
+        buildConfigField("String", "UPDATE_TAG_PREFIX", "\"v\"")
     }
 
     splits {
@@ -134,6 +144,9 @@ android {
             dimension = "env"
             applicationId = "com.dev.bitchord"
             resValue("string", "app_name", "BitChord Dev")
+            buildConfigField("String", "UPDATE_APK_PREFIX", "\"BitChord-4pril-\"")
+            buildConfigField("String", "UPDATE_REPOSITORY", "\"04pril/BitChord-Android\"")
+            buildConfigField("String", "UPDATE_TAG_PREFIX", "\"4pril-android-v\"")
         }
         create("prod") {
             dimension = "env"
@@ -231,6 +244,15 @@ android {
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
             // The three BouncyCastle jars (bcprov, bcutil, bcpkix) ship one licence between them.
             pickFirsts += setOf("META-INF/LICENSE.md", "META-INF/LICENSE.txt", "META-INF/NOTICE.md")
+            // BouncyCastle data nothing here reads (~1.2 MB): the Picnic
+            // post-quantum signature tables and the certificate-path
+            // reviewer's message bundles. SMBJ, libadb and the watch
+            // installer only use digests, AES/GCM, HKDF and the X.509 builder.
+            excludes += setOf(
+                "org/bouncycastle/pqc/**",
+                "org/bouncycastle/x509/CertPathReviewerMessages*.properties",
+                "org/bouncycastle/pkix/CertPathReviewerMessages*.properties",
+            )
         }
     }
     buildFeatures {
@@ -327,6 +349,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.11.0")
     implementation("androidx.media3:media3-common:1.11.0")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.0")
+    // The lyrics share's video: a canvas clip, blurred, with the card laid over it.
+    implementation("androidx.media3:media3-transformer:1.11.0")
+    implementation("androidx.media3:media3-effect:1.11.0")
     // Audio is progressive, but Apple serves its motion artwork as HLS — this
     // is what lets the animated sleeve play it. See CanvasArtworkPlayer.
     implementation("androidx.media3:media3-exoplayer-hls:1.11.0")
@@ -430,10 +455,12 @@ dependencies {
     implementation("com.hierynomus:smbj:0.15.0")
 
     // ---- Automix: on-device beat/downbeat model (Beat This!, MIT-licensed) ----
-    // The full android artifact, not onnxruntime-mobile: mobile only loads .ort
-    // files, which would put an offline conversion step between the model and
-    // the app for a saving that does not matter in a self-distributed APK.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
+    // onnxruntime-android 1.28.0 with libonnxruntime.so rebuilt from the same
+    // tag holding only the operators Automix's two models use: ~25 MB less per
+    // ABI than the published AAR, which carries every operator plus the WebGPU,
+    // NNAPI and XNNPACK providers. Its Java API and JNI library are the official
+    // ones. Rebuilt by native/onnxruntime/build.sh; rerun it when a model changes.
+    implementation(files("libs/onnxruntime-android-1.28.0-automix.aar"))
 
     // ---- Casting: Google Cast sender + the route discovery it sits on ----
     // The framework and the router only. media3-cast is left out on purpose:
@@ -447,6 +474,12 @@ dependencies {
     // See com.music.bitchord.wear.WearBridge. Rides on the Play services base
     // the Cast framework already brings, so it adds very little.
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
+
+    // ---- Google Drive backup: the device's own Google sign-in ----
+    // See com.music.bitchord.data.backup.DriveAuth. Only the authorization
+    // client: Drive itself is three REST calls over OkHttp, which is far
+    // lighter than the google-api-services-drive client and its HTTP stack.
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
     // Opens the watch app after an update, so its install prompt is on screen.
     implementation("androidx.wear:wear-remote-interactions:1.1.0")
 
@@ -511,8 +544,7 @@ tasks.matching { it.name == "installDevDebug" }.configureEach { finalizedBy(veri
  * The watch app rides inside the phone app, so "BitChord for Wear OS" in
  * Settings can put it on a watch — or update it — with no computer involved.
  *
- * Each phone variant carries the watch build of the same flavor *and* build
- * type: the same package (dev with dev, prod with prod) and the same signing
+ * Each phone variant carries a watch build of the same flavor and signing type: the same package (dev with dev, prod with prod) and the same signing
  * key, which is what the Wearable Data Layer needs before the two will talk at
  * all. A SHA-256 travels with it, so the phone can tell the watch's build from
  * the one it carries even when the version numbers match.
@@ -553,12 +585,18 @@ if (providers.gradleProperty("bitchord.bundleWear").orNull != "false" && findPro
     androidComponents.onVariants { variant ->
         val flavor = variant.productFlavors.firstOrNull { it.first == "env" }?.second ?: return@onVariants
         val type = variant.buildType ?: return@onVariants
-        // The benchmark build has no watch counterpart.
-        if (type != "debug" && type != "release") return@onVariants
+        val watchType = when (type) {
+            "debug", "release" -> type
+            // Optimized phones use the same debug key as this watch variant.
+            "optimized" -> "debug"
+            else -> return@onVariants
+        }
         val cap = variant.name.replaceFirstChar { it.uppercase() }
+        val watchVariant = (flavor + watchType.replaceFirstChar { it.uppercase() })
+            .replaceFirstChar { it.uppercase() }
         val bundle = tasks.register<BundleWearApk>("bundleWearApk$cap") {
-            dependsOn(":wearos:assemble$cap")
-            apks.from(rootProject.layout.projectDirectory.dir("wearos/build/outputs/apk/$flavor/$type"))
+            dependsOn(":wearos:assemble$watchVariant")
+            apks.from(rootProject.layout.projectDirectory.dir("wearos/build/outputs/apk/$flavor/$watchType"))
         }
         variant.sources.assets?.addGeneratedSourceDirectory(bundle, BundleWearApk::outputDir)
     }
