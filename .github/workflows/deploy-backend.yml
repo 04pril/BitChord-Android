@@ -23,6 +23,7 @@ jobs:
         working-directory: backend
 
   deploy:
+    if: github.repository == 'kushagrasinghx/BitChord'
     needs: test
     runs-on: ubuntu-latest
     steps:

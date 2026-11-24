@@ -7,6 +7,7 @@ on:
 
 jobs:
   build-prod-release:
+    if: github.repository == 'kushagrasinghx/BitChord'
     runs-on: ubuntu-latest
 
     steps:

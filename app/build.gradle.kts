@@ -224,13 +224,13 @@ android {
          * Unlike benchmark, this keeps the dev application's original
          * package id (com.dev.bitchord) so an existing installation can be
          * upgraded IF the signing certificate matches. It inherits the
-         * untouched upstream release R8/shrink config and uses the normal
-         * Android debug signing key for test distribution.
+         * upstream release R8/shrink config. Test builds use the debug key
+         * when the fork's release keystore is not configured.
          * No tweaks to original blur, glass, transitions or playback.
          */
         create("optimized") {
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
     }
@@ -587,8 +587,8 @@ if (providers.gradleProperty("bitchord.bundleWear").orNull != "false" && findPro
         val type = variant.buildType ?: return@onVariants
         val watchType = when (type) {
             "debug", "release" -> type
-            // Optimized phones use the same debug key as this watch variant.
-            "optimized" -> "debug"
+            // The optimized phone and bundled watch must use the same certificate.
+            "optimized" -> if (signing.getProperty("storeFile")?.let { rootProject.file(it).isFile } == true) "release" else "debug"
             else -> return@onVariants
         }
         val cap = variant.name.replaceFirstChar { it.uppercase() }

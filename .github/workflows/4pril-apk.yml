@@ -3,10 +3,14 @@ name: 4pril Android test APK
 on:
   push:
     branches: [feat/app-local-proxy, update/android-v1.10]
-    tags: ['4pril-android-v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publish_stable:
+        description: Publish a signed stable release from the selected main commit
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -16,6 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - name: Require the fork's main branch for stable publication
+        if: inputs.publish_stable
+        run: |
+          test "$GITHUB_REPOSITORY" = "04pril/BitChord-Android"
+          test "$GITHUB_REF" = "refs/heads/main"
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
@@ -68,6 +77,22 @@ jobs:
           mkdir -p app/src/main/assets/wireguard/licenses
           cp wireguard-source/LICENSE wireguard-source/NOTICE app/src/main/assets/wireguard/licenses/
           cp -a wireguard-source/native/wireguard/licenses/. app/src/main/assets/wireguard/licenses/
+      - name: Load the fork's persistent signing key
+        if: inputs.publish_stable
+        env:
+          FORK_KEYSTORE: ${{ secrets.FOURPRIL_ANDROID_KEYSTORE }}
+          FORK_PASSWORD: ${{ secrets.FOURPRIL_ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$FORK_KEYSTORE" && test -n "$FORK_PASSWORD"
+          umask 077
+          key_file="$RUNNER_TEMP/4pril-android.p12"
+          printf '%s' "$FORK_KEYSTORE" | base64 -d > "$key_file"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=4pril-android\nkeyPassword=%s\n' \
+            "$key_file" "$FORK_PASSWORD" "$FORK_PASSWORD" > keystore.properties
+          if [ ! -x "$ANDROID_HOME/build-tools/36.0.0/apksigner" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"
+          fi
       # A devDebug APK does not run the upstream R8 optimisations and
       # significantly overstates the UI jank compared with a normal release.
       # Keep the dev package ID but build the release-equivalent, minified,
@@ -75,9 +100,11 @@ jobs:
       - name: Assemble R8-optimized direct-install development APK
         run: bash ./gradlew --no-daemon :app:assembleDevOptimized
       - name: Run unit tests (report locale completeness failures separately)
+        if: ${{ !inputs.publish_stable }}
         continue-on-error: true
         run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest
       - name: Collect clearly labeled test APKs
+        if: ${{ !inputs.publish_stable }}
         run: |
           mkdir -p distribution
           for apk in app/build/outputs/apk/dev/optimized/*.apk; do
@@ -92,6 +119,7 @@ jobs:
           ls distribution/*.apk
           sha256sum distribution/*.apk > distribution/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.publish_stable }}
         with:
           name: BitChord-4pril-Android-TEST-APK
           path: distribution/*
@@ -109,9 +137,47 @@ jobs:
             --title "4pril BitChord Android TEST #${GITHUB_RUN_NUMBER}" \
             --prerelease \
             --notes "R8-optimized standalone Android development APK with built-in WireGuard (arm64-v8a / x86_64). Original Liquid Glass/blur/player engines unchanged. Default song tap opens full player. Mini-player swipes into bottom tabs and stops playback. This build is signed with the runner's debug key; if update fails due to certificate mismatch, back up your .conf and reinstall. Login WebView egress remains device-unverified."
-      - name: Publish prerelease on tag
-        if: startsWith(github.ref, 'refs/tags/4pril-android-v')
+      - name: Verify and publish stable APKs
+        if: inputs.publish_stable
         env:
           GH_TOKEN: ${{ github.token }}
+          FORK_PASSWORD: ${{ secrets.FOURPRIL_ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          gh release create "$GITHUB_REF_NAME" distribution/* --title "4pril Android TEST $GITHUB_REF_NAME" --prerelease --notes "R8-optimized Android development APK including native userspace WireGuard. Google sign-in WebView requires real-device verification."
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          apk_dir="app/build/outputs/apk/dev/optimized"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          expected="$(keytool -exportcert -alias 4pril-android \
+            -keystore "$RUNNER_TEMP/4pril-android.p12" -storepass:env FORK_PASSWORD | sha256sum | cut -d' ' -f1)"
+          verify_signer() {
+            local actual
+            actual="$("$tools/apksigner" verify --print-certs "$1" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+            test "$actual" = "$expected"
+          }
+          metadata="$("$tools/aapt" dump badging "$apk_dir/app-dev-arm64-v8a-optimized.apk")"
+          version="$(sed -n "s/^package: name='com.dev.bitchord' versionCode='[0-9]*' versionName='\([0-9.]*\)'.*/\1/p" <<< "$metadata")"
+          test -n "$version"
+          tag="4pril-android-v$version"
+          notes=".github/release-notes/$tag.md"
+          test -s "$notes"
+          mkdir -p release
+          for abi in arm64-v8a universal x86_64; do
+            apk="$apk_dir/app-dev-$abi-optimized.apk"
+            test -s "$apk"
+            verify_signer "$apk"
+            entries="$(unzip -Z1 "$apk")"
+            if [ "$abi" = universal ]; then
+              grep -Fxq 'lib/arm64-v8a/libmorphewireguard.so' <<< "$entries"
+              grep -Fxq 'lib/x86_64/libmorphewireguard.so' <<< "$entries"
+            else
+              grep -Fxq "lib/$abi/libmorphewireguard.so" <<< "$entries"
+            fi
+            unzip -p "$apk" assets/wear/BitChordWear.apk > "$RUNNER_TEMP/BitChordWear.apk"
+            verify_signer "$RUNNER_TEMP/BitChordWear.apk"
+            cp "$apk" "release/BitChord-4pril-v$version-$abi.apk"
+          done
+          (cd release && sha256sum *.apk > SHA256SUMS.txt)
+          printf 'APK signer SHA-256: %s\n' "$expected" >> "$GITHUB_STEP_SUMMARY"
+          gh release create "$tag" release/*.apk release/SHA256SUMS.txt \
+            --repo "$repo" --target "$GITHUB_SHA" --title "4pril BitChord Android v$version" \
+            --notes-file "$notes" --latest

@@ -269,6 +269,9 @@ object AppSettings {
      */
     val downloadLikedSongs = MutableStateFlow(false)
 
+    private val _ignoreUpdateNotifications = MutableStateFlow(false)
+    val ignoreUpdateNotifications = _ignoreUpdateNotifications.asStateFlow()
+
     /** Whether the active network charges for data. `null` while offline. */
     val meteredConnection = MutableStateFlow<Boolean?>(null)
 
@@ -1059,6 +1062,7 @@ object AppSettings {
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         syncDownloadedPlaylists.value = prefs.getBoolean(KEY_SYNC_DOWNLOADED_PLAYLISTS, false)
         downloadLikedSongs.value = prefs.getBoolean(KEY_DOWNLOAD_LIKED_SONGS, false)
+        _ignoreUpdateNotifications.value = prefs.getBoolean(KEY_IGNORE_UPDATE_NOTIFICATIONS, false)
         crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE, 0)
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
         _autoMixArtwork.value = AutoMixArtworkPreferences(
@@ -2008,6 +2012,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SYNC_DOWNLOADED_PLAYLISTS, value).apply()
     }
 
+    fun setIgnoreUpdateNotifications(value: Boolean) {
+        _ignoreUpdateNotifications.value = value
+        prefs.edit().putBoolean(KEY_IGNORE_UPDATE_NOTIFICATIONS, value).apply()
+    }
+
     fun setDownloadLikedSongs(value: Boolean) {
         downloadLikedSongs.value = value
         prefs.edit().putBoolean(KEY_DOWNLOAD_LIKED_SONGS, value).apply()
@@ -2432,6 +2441,7 @@ object AppSettings {
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
     private const val KEY_SYNC_DOWNLOADED_PLAYLISTS = "sync_downloaded_playlists"
     private const val KEY_DOWNLOAD_LIKED_SONGS = "download_liked_songs"
+    private const val KEY_IGNORE_UPDATE_NOTIFICATIONS = "fourpril_ignore_update_notifications"
     private const val KEY_CROSSFADE = "crossfade_seconds"
     private const val KEY_SMART_FADE = "smart_fade_enabled"
     private const val KEY_AUTOMIX_ART_TRANSITION = "automix_art_transition"

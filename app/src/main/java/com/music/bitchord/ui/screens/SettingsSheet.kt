@@ -293,6 +293,7 @@ fun SettingsScreen(
     val exportDownloads by AppSettings.exportDownloads.collectAsStateWithLifecycle()
     val syncDownloadedPlaylists by AppSettings.syncDownloadedPlaylists.collectAsStateWithLifecycle()
     val downloadLikedSongs by AppSettings.downloadLikedSongs.collectAsStateWithLifecycle()
+    val ignoreUpdateNotifications by AppSettings.ignoreUpdateNotifications.collectAsStateWithLifecycle()
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val hideStatusBarInPlayer by AppSettings.hideStatusBarInPlayer.collectAsStateWithLifecycle()
@@ -1797,6 +1798,21 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setShowListenTogetherButton(!listenTogetherButton) },
+                )
+            }
+            val ignoreUpdatesTitle = stringResource(R.string.fourpril_ignore_update_notifications)
+            row(ignoreUpdatesTitle, "updates", "notification", "업데이트", "알림") {
+                SettingsRow(
+                    icon = SfIcons.VisibilityOff,
+                    title = ignoreUpdatesTitle,
+                    subtitle = stringResource(R.string.fourpril_ignore_update_notifications_subtitle),
+                    trailing = {
+                        IosSwitch(
+                            checked = ignoreUpdateNotifications,
+                            onCheckedChange = AppSettings::setIgnoreUpdateNotifications,
+                        )
+                    },
+                    onClick = { AppSettings.setIgnoreUpdateNotifications(!ignoreUpdateNotifications) },
                 )
             }
             val hideStatusBarTitle = stringResource(R.string.hide_status_bar_in_player)

@@ -919,10 +919,13 @@ private fun BitChordApp(
      * a beat before the popup does — they're one piece of news, and staggering
      * them made the top bar look like it had caught something the app hadn't.
      */
-    val updateNotice = updateAvailable
+    val ignoreUpdateNotifications by AppSettings.ignoreUpdateNotifications.collectAsStateWithLifecycle()
+    val updateNotice = updateAvailable.takeUnless { ignoreUpdateNotifications }
 
     LaunchedEffect(updateNotice) {
-        if (updateNotice != null && !updateDialogShown) {
+        if (updateNotice == null) {
+            showUpdateDialog = false
+        } else if (!updateDialogShown) {
             updateDialogShown = true
             showUpdateDialog = true
         }
@@ -3026,7 +3029,7 @@ private fun BitChordApp(
         val replayDrawable = replay.summary?.isEmpty == false
         BackHandler(enabled = replayDrawable && replayStory != null && !showReplayShare) { replayStory = null }
         BackHandler(enabled = replayDrawable && showReplayShare) { showReplayShare = false }
-        BackHandler(enabled = showUpdateDialog) { showUpdateDialog = false }
+        BackHandler(enabled = showUpdateDialog && updateNotice != null) { showUpdateDialog = false }
         BackHandler(enabled = showListenBrainzLogin) { showListenBrainzLogin = false }
         BackHandler(enabled = showLastfmLogin) { showLastfmLogin = false }
         BackHandler(enabled = discordDialog != null) { discordDialog = null }
