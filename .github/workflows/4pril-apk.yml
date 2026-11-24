@@ -7,8 +7,8 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      publish_stable:
-        description: Publish a signed stable release from the selected main commit
+      publish_prerelease:
+        description: Publish a signed prerelease from the selected main commit
         type: boolean
         default: false
 
@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Require the fork's main branch for stable publication
-        if: inputs.publish_stable
+      - name: Require the fork's main branch for prerelease publication
+        if: inputs.publish_prerelease
         run: |
           test "$GITHUB_REPOSITORY" = "04pril/BitChord-Android"
           test "$GITHUB_REF" = "refs/heads/main"
@@ -78,7 +78,7 @@ jobs:
           cp wireguard-source/LICENSE wireguard-source/NOTICE app/src/main/assets/wireguard/licenses/
           cp -a wireguard-source/native/wireguard/licenses/. app/src/main/assets/wireguard/licenses/
       - name: Load the fork's persistent signing key
-        if: inputs.publish_stable
+        if: inputs.publish_prerelease
         env:
           FORK_KEYSTORE: ${{ secrets.FOURPRIL_ANDROID_KEYSTORE }}
           FORK_PASSWORD: ${{ secrets.FOURPRIL_ANDROID_KEYSTORE_PASSWORD }}
@@ -100,11 +100,11 @@ jobs:
       - name: Assemble R8-optimized direct-install development APK
         run: bash ./gradlew --no-daemon :app:assembleDevOptimized
       - name: Run unit tests (report locale completeness failures separately)
-        if: ${{ !inputs.publish_stable }}
+        if: ${{ !inputs.publish_prerelease }}
         continue-on-error: true
         run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest
       - name: Collect clearly labeled test APKs
-        if: ${{ !inputs.publish_stable }}
+        if: ${{ !inputs.publish_prerelease }}
         run: |
           mkdir -p distribution
           for apk in app/build/outputs/apk/dev/optimized/*.apk; do
@@ -119,7 +119,7 @@ jobs:
           ls distribution/*.apk
           sha256sum distribution/*.apk > distribution/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
-        if: ${{ !inputs.publish_stable }}
+        if: ${{ !inputs.publish_prerelease }}
         with:
           name: BitChord-4pril-Android-TEST-APK
           path: distribution/*
@@ -137,8 +137,8 @@ jobs:
             --title "4pril BitChord Android TEST #${GITHUB_RUN_NUMBER}" \
             --prerelease \
             --notes "R8-optimized standalone Android development APK with built-in WireGuard (arm64-v8a / x86_64). Original Liquid Glass/blur/player engines unchanged. Default song tap opens full player. Mini-player swipes into bottom tabs and stops playback. This build is signed with the runner's debug key; if update fails due to certificate mismatch, back up your .conf and reinstall. Login WebView egress remains device-unverified."
-      - name: Verify and publish stable APKs
-        if: inputs.publish_stable
+      - name: Verify and publish prerelease APKs
+        if: inputs.publish_prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           FORK_PASSWORD: ${{ secrets.FOURPRIL_ANDROID_KEYSTORE_PASSWORD }}
@@ -180,4 +180,4 @@ jobs:
           printf 'APK signer SHA-256: %s\n' "$expected" >> "$GITHUB_STEP_SUMMARY"
           gh release create "$tag" release/*.apk release/SHA256SUMS.txt \
             --repo "$repo" --target "$GITHUB_SHA" --title "4pril BitChord Android v$version" \
-            --notes-file "$notes" --latest
+            --notes-file "$notes" --prerelease --latest=false
